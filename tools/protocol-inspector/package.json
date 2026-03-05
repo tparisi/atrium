@@ -1,0 +1,11 @@
+{
+  "name": "@atrium/protocol-inspector",
+  "version": "0.1.0",
+  "description": "Interactive SOP protocol inspector",
+  "license": "MIT",
+  "author": "Tony Parisi / Metatron Studio",
+  "type": "module",
+  "scripts": {
+    "start": "npx serve ."
+  }
+}

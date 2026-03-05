@@ -1,0 +1,21 @@
+{
+  "name": "@atrium/client",
+  "version": "0.1.0",
+  "description": "Atrium browser client",
+  "license": "MIT",
+  "author": "Tony Parisi / Metatron Studio",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@atrium/protocol": "workspace:*",
+    "@atrium/gltf-extension": "workspace:*",
+    "three": "^0.160.0",
+    "@gltf-transform/core": "^4.0.0",
+    "@gltf-transform/view": "^4.0.0"
+  }
+}

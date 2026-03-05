@@ -1,0 +1,15 @@
+{
+  "name": "@atrium/protocol",
+  "version": "0.1.0",
+  "description": "SOP message schemas and validators",
+  "license": "MIT",
+  "author": "Tony Parisi / Metatron Studio",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "ajv": "^8.0.0"
+  }
+}

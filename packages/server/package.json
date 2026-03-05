@@ -1,0 +1,18 @@
+{
+  "name": "@atrium/server",
+  "version": "0.1.0",
+  "description": "Atrium world server",
+  "license": "MIT",
+  "author": "Tony Parisi / Metatron Studio",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@atrium/protocol": "workspace:*",
+    "@atrium/gltf-extension": "workspace:*",
+    "ws": "^8.0.0"
+  }
+}
