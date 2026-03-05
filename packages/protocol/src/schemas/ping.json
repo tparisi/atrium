@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Ping",
+  "description": "Clock sync request from client",
+  "type": "object",
+  "required": ["type", "clientTime"],
+  "properties": {
+    "type": { "const": "ping" },
+    "clientTime": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

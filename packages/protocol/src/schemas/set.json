@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Set",
+  "description": "Authoritative property update from server",
+  "type": "object",
+  "required": ["type", "seq", "node", "field", "value", "serverTime"],
+  "properties": {
+    "type": { "const": "set" },
+    "seq": { "type": "integer", "minimum": 0 },
+    "node": { "type": "string", "minLength": 1 },
+    "field": { "type": "string", "minLength": 1 },
+    "value": {},
+    "serverTime": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

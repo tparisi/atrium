@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Hello (Client)",
+  "description": "Initial handshake message sent by client",
+  "type": "object",
+  "required": ["type", "id"],
+  "properties": {
+    "type": { "const": "hello" },
+    "id": { "type": "string", "minLength": 1 },
+    "ticket": { "type": "string" },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "tick": {
+          "oneOf": [
+            { "type": "boolean", "const": false },
+            {
+              "type": "object",
+              "properties": {
+                "interval": { "type": "integer", "minimum": 1 }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "physics": { "type": "boolean" },
+        "chat": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Send",
+  "description": "Client request to mutate a node property",
+  "type": "object",
+  "required": ["type", "seq", "node", "field", "value"],
+  "properties": {
+    "type": { "const": "send" },
+    "seq": { "type": "integer", "minimum": 0 },
+    "node": { "type": "string", "minLength": 1 },
+    "field": { "type": "string", "minLength": 1 },
+    "value": {}
+  },
+  "additionalProperties": false
+}

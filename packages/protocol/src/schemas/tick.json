@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Tick",
+  "description": "World heartbeat from server",
+  "type": "object",
+  "required": ["type", "seq", "serverTime"],
+  "properties": {
+    "type": { "const": "tick" },
+    "seq": { "type": "integer", "minimum": 0 },
+    "serverTime": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Hello (Server)",
+  "description": "Server handshake response",
+  "type": "object",
+  "required": ["type", "id", "seq", "serverTime"],
+  "properties": {
+    "type": { "const": "hello" },
+    "id": { "type": "string", "minLength": 1 },
+    "seq": { "type": "integer", "minimum": 0 },
+    "serverTime": { "type": "integer", "minimum": 0 },
+    "worldStartTime": { "type": "integer", "minimum": 0 },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "tick": {
+          "type": "object",
+          "required": ["interval", "minInterval"],
+          "properties": {
+            "interval": { "type": "integer", "minimum": 1 },
+            "minInterval": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "physics": { "type": "boolean" },
+        "chat": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

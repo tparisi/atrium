@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Error",
+  "description": "Error response from server",
+  "type": "object",
+  "required": ["type", "code", "message"],
+  "properties": {
+    "type": { "const": "error" },
+    "code": {
+      "type": "string",
+      "enum": [
+        "PERMISSION_DENIED",
+        "NODE_NOT_FOUND",
+        "INVALID_FIELD",
+        "INVALID_VALUE",
+        "WORLD_FULL",
+        "AUTH_FAILED",
+        "RATE_LIMITED",
+        "UNKNOWN_MESSAGE"
+      ]
+    },
+    "seq": { "type": "integer", "minimum": 0 },
+    "message": { "type": "string" }
+  },
+  "additionalProperties": false
+}
