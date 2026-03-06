@@ -1,0 +1,7 @@
+{
+  "version": "0.1.0",
+  "world": {
+    "gltf": "./space.gltf",
+    "server": "ws://localhost:3000"
+  }
+}

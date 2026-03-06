@@ -74,6 +74,52 @@ mouse drag, avatar broadcasting). Avatar position only broadcasts in Walk mode.
 - Camera locked at head height 1.7 units
 - No avatar broadcasting in Orbit mode
 
+### World manifest — `atrium.json` sidecar file
+**Decided:** Session 7
+
+`atrium.json` is the entry point for a fully deployed Atrium world. It is a
+sidecar file containing deployment configuration — glTF URL and server URL.
+This separates infrastructure config from content.
+
+The glTF file remains pure content. `extras.atrium` in the glTF stays for
+world metadata intrinsic to the content (maxUsers, navigation, capabilities,
+etc.). Server connection info is NOT in the glTF — it belongs in the manifest.
+
+Paths in the manifest (`world.gltf`, `world.server`) are resolved relative
+to the manifest file's own URL, not the page URL.
+
+Minimal v0.1 shape:
+```json
+{
+  "version": "0.1.0",
+  "world": {
+    "gltf": "./space.gltf",
+    "server": "ws://localhost:3000"
+  }
+}
+```
+
+### Atrium browser load sequence
+**Decided:** Session 7
+
+Correct sequence:
+1. Look for `atrium.json` at the navigated URL
+2. If found: read glTF URL and server URL from manifest
+3. If not found: fall back to `space.gltf` at the same base URL
+4. Immediately fetch and render the glTF — no server connection required
+5. In background: connect to WebSocket server if URL is known
+6. On server hello: sync world state on top of already-rendered scene
+
+The glTF renders whether or not a server is reachable. Static first,
+multiplayer second.
+
+### Default camera mode — Walk
+**Decided:** Session 7
+
+Walk mode is the default camera mode in the test client. Orbit is available
+via the combo box for scene inspection. Walk is the primary experience now
+that avatar embodiment is working.
+
 ### packages/client promotion — deferred
 **Decided:** Session 6 planning
 
@@ -104,7 +150,7 @@ other properties help clients optimize and provide better UX. The interim
 `ATRIUM_world` and `ATRIUM_avatar` extension definitions. Significant design
 effort — deferred to a future focused session.
 
-
+### README — add testing / dev workflow documentation
 **Deferred:** Session 5
 
 The README needs to be updated with testing and local dev workflow information,

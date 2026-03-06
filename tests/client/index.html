@@ -303,8 +303,8 @@
   <div class="cam-bar">
     <label for="cameraMode">Camera:</label>
     <select id="cameraMode">
-      <option value="orbit">Orbit</option>
       <option value="walk">Walk</option>
+      <option value="orbit">Orbit</option>
     </select>
   </div>
 </header>
@@ -373,7 +373,8 @@ import { DocumentView } from 'https://esm.sh/@gltf-transform/view@4.3.0?deps=thr
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const WORLD_GLTF_PATH = '../fixtures/space.gltf'
+const MANIFEST_PATH = '../fixtures/space.atrium.json'
+const FALLBACK_GLTF_PATH = '../fixtures/space.gltf'
 const WALK_SPEED = 4                                    // units/second
 const WALK_EYE_Y = 1.7                                  // eye height in Walk mode
 const LOOK_SENSITIVITY = 0.2 * (Math.PI / 180)         // radians per pixel
@@ -395,7 +396,7 @@ const logEntries = []
 const avatars = new Map()
 
 // Camera / walk state
-let cameraMode = 'orbit'
+let cameraMode = 'walk'
 const keysDown = new Set()
 let walkYaw   = 0
 let walkPitch = 0
@@ -468,6 +469,7 @@ viewportEl.appendChild(renderer.domElement)
 const controls = new OrbitControls(camera, renderer.domElement)
 controls.target.set(0, 0.5, 0)
 controls.update()
+switchToWalk()
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.4)
 threeScene.add(ambient)
@@ -674,36 +676,45 @@ animate()
 // ---------------------------------------------------------------------------
 // glTF scene loading
 // ---------------------------------------------------------------------------
-async function loadScene() {
-  overlayEl.textContent = 'Loading scene…'
+async function loadScene(gltfPath) {
+  overlayEl.textContent = 'Loading…'
   try {
     const io = new WebIO().registerExtensions(KHRONOS_EXTENSIONS)
-    gltfDoc = await io.read(WORLD_GLTF_PATH)
+    gltfDoc = await io.read(gltfPath)
     docView = new DocumentView(gltfDoc)
     const sceneDef = gltfDoc.getRoot().listScenes()[0]
     const group = docView.view(sceneDef)
     threeScene.add(group)
     overlayEl.textContent = ''
-    logInfo('Scene loaded: ' + WORLD_GLTF_PATH)
+    setStatus('', 'Offline')
+    logInfo('Scene loaded: ' + gltfPath)
   } catch (err) {
-    overlayEl.textContent = 'Scene load failed — static mode unavailable'
+    overlayEl.textContent = 'Scene load failed'
+    setStatus('', 'Offline')
     logInfo('Scene load error: ' + err.message, true)
   }
 }
 
-async function tryStaticLoad() {
+async function loadManifest() {
   try {
-    const io = new WebIO().registerExtensions(KHRONOS_EXTENSIONS)
-    gltfDoc = await io.read(WORLD_GLTF_PATH)
-    docView = new DocumentView(gltfDoc)
-    const sceneDef = gltfDoc.getRoot().listScenes()[0]
-    const group = docView.view(sceneDef)
-    threeScene.add(group)
-    overlayEl.textContent = 'Offline mode'
-    logInfo('Offline static scene loaded')
-  } catch {
-    overlayEl.textContent = 'No scene loaded (offline)'
+    const res = await fetch(MANIFEST_PATH)
+    if (res.ok) return await res.json()
+  } catch {}
+  return null
+}
+
+async function init() {
+  setStatus('', 'Loading…')
+  const manifest = await loadManifest()
+  let gltfPath = FALLBACK_GLTF_PATH
+  let serverUrl = 'ws://localhost:3000'
+  if (manifest) {
+    const manifestUrl = new URL(MANIFEST_PATH, window.location.href)
+    if (manifest.world?.gltf)   gltfPath  = new URL(manifest.world.gltf,   manifestUrl).href
+    if (manifest.world?.server) serverUrl = new URL(manifest.world.server, manifestUrl).href
   }
+  urlInput.value = serverUrl
+  await loadScene(gltfPath)
 }
 
 // ---------------------------------------------------------------------------
@@ -786,7 +797,7 @@ function connect() {
     myServerId = null
     lastBroadcastPos = null
     clearAllAvatars()
-    setStatus('', 'Disconnected')
+    setStatus('', 'Offline')
     btnConnect.disabled = false
     btnDisconnect.disabled = true
     btnSend.disabled = true
@@ -808,10 +819,9 @@ function sendMessage(msgObj) {
   logMessage('outbound', msgObj)
 }
 
-async function onServerHello(msg) {
+function onServerHello(msg) {
   myServerId = msg.id
   setStatus('connected', 'Connected  id:' + msg.id)
-  if (!gltfDoc) await loadScene()
 }
 
 function onJoin(msg) {
@@ -988,7 +998,7 @@ btnClear.addEventListener('click', () => {
 btnConnect.addEventListener('click', connect)
 btnDisconnect.addEventListener('click', disconnect)
 
-tryStaticLoad()
+init()
 </script>
 </body>
 </html>
