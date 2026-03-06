@@ -119,4 +119,16 @@ Decide in a future session whether this lives in the README directly or in a
 separate `tests/TESTING.md` that the README references. Lean toward a separate
 doc to keep the README high-level.
 
+### Known flaky test: "handles client disconnect cleanly" (session.test.js)
+**Noted:** Session 6
+
+Test 19 in packages/server fails intermittently — roughly 1 in 3 runs.
+Root cause: timing/race condition in the WebSocket close event and session
+cleanup within the test's async window. Not a production correctness issue.
+Pre-existing — present since Session 2, not introduced by Session 6.
+
+To investigate in a future session: add a small delay or use a proper
+async signal (e.g. waiting for the sessions Map to update) rather than
+relying on timing.
+
 ---
