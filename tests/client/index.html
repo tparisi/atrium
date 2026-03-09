@@ -369,6 +369,7 @@ import { OrbitControls } from 'https://esm.sh/three@0.163.0/addons/controls/Orbi
 import { WebIO } from 'https://esm.sh/@gltf-transform/core@4.3.0'
 import { KHRONOS_EXTENSIONS } from 'https://esm.sh/@gltf-transform/extensions@4.3.0'
 import { DocumentView } from 'https://esm.sh/@gltf-transform/view@4.3.0?deps=three@0.163.0'
+import { SOMDocument } from './som/index.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -389,6 +390,7 @@ let myServerId = null   // server-assigned ID received in hello response
 let ws = null
 let wsConnected = false
 let gltfDoc = null
+let som = null
 let docView = null
 const logEntries = []
 
@@ -681,6 +683,8 @@ async function loadScene(gltfPath) {
   try {
     const io = new WebIO().registerExtensions(KHRONOS_EXTENSIONS)
     gltfDoc = await io.read(gltfPath)
+    som = new SOMDocument(gltfDoc)
+    window.som = som
     docView = new DocumentView(gltfDoc)
     const sceneDef = gltfDoc.getRoot().listScenes()[0]
     const group = docView.view(sceneDef)
@@ -718,39 +722,25 @@ async function init() {
 }
 
 // ---------------------------------------------------------------------------
-// SOP → Document mutations
+// SOP → Document mutations (via SOM)
 // ---------------------------------------------------------------------------
 function applySet(msg) {
-  if (!gltfDoc) return
-  const node = gltfDoc.getRoot().listNodes().find(n => n.getName() === msg.node)
+  const node = som.getNodeByName(msg.node)
   if (!node) return
-  switch (msg.field) {
-    case 'translation': node.setTranslation(msg.value); break
-    case 'rotation':    node.setRotation(msg.value);    break
-    case 'scale':       node.setScale(msg.value);       break
-    case 'extras':      node.setExtras(msg.value);      break
+  try {
+    som.setPath(node, msg.field, msg.value)
+  } catch (e) {
+    console.warn('applySet failed:', e.message)
   }
 }
 
 function applyAdd(msg) {
-  if (!gltfDoc) return
-  const newNode = gltfDoc.createNode(msg.node.name)
-  if (msg.node.translation) newNode.setTranslation(msg.node.translation)
-  if (msg.node.rotation)    newNode.setRotation(msg.node.rotation)
-  if (msg.node.scale)       newNode.setScale(msg.node.scale)
-  if (msg.node.extras)      newNode.setExtras(msg.node.extras)
-  if (msg.parent) {
-    const parent = gltfDoc.getRoot().listNodes().find(n => n.getName() === msg.parent)
-    if (parent) parent.addChild(newNode)
-    else gltfDoc.getRoot().listScenes()[0]?.addChild(newNode)
-  } else {
-    gltfDoc.getRoot().listScenes()[0]?.addChild(newNode)
-  }
+  const node = som.createNode(msg.node)
+  som.scene.addChild(node)
 }
 
 function applyRemove(msg) {
-  if (!gltfDoc) return
-  const node = gltfDoc.getRoot().listNodes().find(n => n.getName() === msg.node)
+  const node = som.getNodeByName(msg.node)
   if (node) node.dispose()
 }
 

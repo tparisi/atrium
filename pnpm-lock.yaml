@@ -46,12 +46,21 @@ importers:
       '@atrium/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@atrium/som':
+        specifier: workspace:*
+        version: link:../som
       '@gltf-transform/core':
         specifier: ^4.0.0
         version: 4.3.0
       ws:
         specifier: ^8.0.0
         version: 8.19.0
+
+  packages/som:
+    dependencies:
+      '@gltf-transform/core':
+        specifier: ^4.3.0
+        version: 4.3.0
 
   tools/protocol-inspector: {}
 

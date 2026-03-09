@@ -2,72 +2,59 @@
 // Copyright (c) 2026 Tony Parisi / Metatron Studio. See LICENSE in repo root.
 
 import { NodeIO } from '@gltf-transform/core'
-
-const ALLOWED_FIELDS = new Set(['translation', 'rotation', 'scale', 'extras'])
+import { SOMDocument } from '@atrium/som'
 
 export async function createWorld(gltfPath) {
   const io = new NodeIO()
   const document = await io.read(gltfPath)
+  const som = new SOMDocument(document)
 
   const rootExtras = document.getRoot().getExtras()
   const meta = rootExtras?.atrium?.world ?? {}
 
   function getNode(name) {
-    return document.getRoot().listNodes().find((n) => n.getName() === name) ?? null
+    return som.getNodeByName(name)
   }
 
   function setField(nodeName, field, value) {
-    const node = getNode(nodeName)
+    const node = som.getNodeByName(nodeName)
     if (!node) return { ok: false, code: 'NODE_NOT_FOUND' }
-
-    if (!ALLOWED_FIELDS.has(field)) return { ok: false, code: 'INVALID_FIELD' }
-
-    switch (field) {
-      case 'translation': node.setTranslation(value); break
-      case 'rotation':    node.setRotation(value);    break
-      case 'scale':       node.setScale(value);       break
-      case 'extras':      node.setExtras(value);      break
+    try {
+      som.setPath(node, field, value)
+    } catch {
+      return { ok: false, code: 'INVALID_FIELD' }
     }
-
     return { ok: true }
   }
 
   function addNode(nodeDescriptor, parentName) {
-    const node = document.createNode(nodeDescriptor.name)
-
-    if (nodeDescriptor.translation) node.setTranslation(nodeDescriptor.translation)
-    if (nodeDescriptor.rotation)    node.setRotation(nodeDescriptor.rotation)
-    if (nodeDescriptor.scale)       node.setScale(nodeDescriptor.scale)
-    if (nodeDescriptor.extras)      node.setExtras(nodeDescriptor.extras)
-
+    const node = som.createNode(nodeDescriptor)
     if (parentName) {
-      const parent = getNode(parentName)
+      const parent = som.getNodeByName(parentName)
       if (!parent) return { ok: false, code: 'NODE_NOT_FOUND' }
       parent.addChild(node)
     } else {
-      const scene = document.getRoot().listScenes()[0]
-      if (scene) scene.addChild(node)
+      som.scene.addChild(node)
     }
-
     return { ok: true, node }
   }
 
   function removeNode(nodeName) {
-    const node = getNode(nodeName)
+    const node = som.getNodeByName(nodeName)
     if (!node) return { ok: false, code: 'NODE_NOT_FOUND' }
     node.dispose()
     return { ok: true }
   }
 
   function getNodeTranslation(name) {
-    const node = getNode(name)
+    const node = som.getNodeByName(name)
     if (!node) return null
-    return [...node.getTranslation()]
+    return [...node.translation]
   }
 
   function listNodeNames() {
-    return document.getRoot().listNodes().map((n) => n.getName())
+    return som.nodes.map(n => n.name)
   }
 
-  return { meta, getNode, setField, addNode, removeNode, getNodeTranslation, listNodeNames }
+  return { meta, som, getNode, setField, addNode, removeNode, getNodeTranslation, listNodeNames }
 }
