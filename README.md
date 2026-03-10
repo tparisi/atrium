@@ -18,9 +18,7 @@ compelling experience.
 Tony Parisi has been building the foundations of the 3D web since
 co-creating VRML in the 1990s and co-authoring the glTF standard. In 2021
 he wrote [The Seven Rules of the Metaverse](https://medium.com/meta-verses/the-seven-rules-of-the-metaverse-7d4e06fa864c) —
-a framework distilled from decades of practice. There is only one Metaverse.
-It is for everyone. Nobody controls it. It is open, hardware-independent,
-a network, and ultimately the Internet itself.
+a framework distilled from decades of practice.
 
 Atrium is an attempt to build something that actually follows those rules.
 
@@ -42,7 +40,8 @@ is documented and schema-validated. Nothing is proprietary.
 **glTF on the wire.** The multiplayer protocol carries glTF node descriptors
 directly — the same format as the world file. No translation layer, no
 impedance mismatch. Every tool in the stack that speaks glTF speaks the
-protocol for free.
+protocol for free. SOM is the live API surface over that glTF document —
+serializing the Document serializes the world, avatar nodes and all.
 
 **Validate everything.** Every message in and out is validated against the
 SOP JSON schemas. The schema is the contract. Invalid messages never touch
@@ -80,10 +79,14 @@ shared scene graph via `send`/`add`/`remove`, and receive authoritative
 updates as `set` broadcasts. Presence is tracked via `join` and `leave`.
 The full protocol is defined in JSON Schema in `@atrium/protocol`.
 
-**The runtime layer** is the Atrium server — a Node.js WebSocket server
-backed by glTF-Transform, which owns the authoritative scene graph. The
-Atrium client (coming) is a Three.js renderer connected to the server via
-SOP, keeping its local Document in sync with the server's.
+**The runtime layer** is the Atrium server and client, built on top of SOM
+— the Scene Object Model. SOM is a DOM-inspired API layer over
+glTF-Transform: it wraps the live Document and exposes nodes, meshes,
+cameras, materials, and animations through typed accessors and a
+`setPath()` deep-mutation primitive. The server owns the authoritative
+scene graph via SOM; the client mirrors it and feeds it into Three.js
+through DocumentView. Both sides speak the same API — the same code that
+mutates a node on the server mutates a node in the client renderer.
 
 ---
 
@@ -93,22 +96,24 @@ SOP, keeping its local Document in sync with the server's.
 atrium/
 ├── packages/
 │   ├── protocol/        # SOP message schemas (JSON Schema) and Ajv validator
+│   ├── som/             # Scene Object Model — DOM-inspired API over glTF-Transform
 │   ├── server/          # WebSocket world server (Node.js + glTF-Transform)
-│   ├── client/          # Browser client (Three.js + glTF-Transform) [coming]
+│   ├── client/          # Browser client (Three.js + DocumentView) [coming]
 │   └── gltf-extension/  # ATRIUM_world glTF extension definition [coming]
 ├── tools/
 │   └── protocol-inspector/   # Single-file interactive protocol debugger
 ├── tests/
 │   └── fixtures/
 │       └── space.gltf   # Minimal world fixture used by server tests
-└── SESSION-*.md         # Claude Code session briefs — the build history
+└── docs/
+    └── sessions/        # Claude Code session briefs — the build history
 ```
 
-The repo ships with working server and protocol packages, a test world
+The repo ships with working server, protocol, and SOM packages, a test world
 fixture, and a browser-based protocol inspector that lets you connect to
 a running server, send any SOP message, and watch the exchange in real time.
-There are 60 passing tests covering protocol validation, session lifecycle,
-world state mutations, and presence.
+There are 92 passing tests covering protocol validation, session lifecycle,
+world state mutations, presence, and the SOM API.
 
 This is a foundation, not a finished product. The client renderer, the
 object type registry, avatar embodiment, physics, and persistence are all
@@ -129,6 +134,7 @@ pnpm install
 
 # run the tests
 pnpm --filter @atrium/protocol test
+pnpm --filter @atrium/som test
 pnpm --filter @atrium/server test
 
 # start a world server
@@ -152,9 +158,12 @@ the world come alive.
 | Server session lifecycle (`@atrium/server`) | ✅ Complete |
 | World state — glTF-Transform + send/set/add/remove | ✅ Complete |
 | Presence — join/leave | ✅ Complete |
-| Client renderer — Three.js | 🔜 Next |
+| SOM — Scene Object Model (`@atrium/som`) | ✅ Complete |
+| Avatar nodes — SOM lifecycle, connect/disconnect | ✅ Complete |
+| NavigationInfo — mode, speed, updateRate | ✅ Complete |
+| Client renderer — Three.js | 🔄 In progress |
 | glTF extension (`@atrium/gltf-extension`) | 🔜 Upcoming |
-| Avatar embodiment | 🔜 Upcoming |
+| User Object Extensions (`ATRIUM_user_object`) | 🔜 Upcoming |
 | Physics | 🔜 Upcoming |
 | Persistence | 🔜 Upcoming |
 
