@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Atrium</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #111;
+    color: #e2e8f0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Toolbar ───────────────────────────────────────── */
+  .toolbar {
+    background: #1e1e1e;
+    border-bottom: 1px solid #333;
+    padding: 7px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .toolbar h1 {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #a78bfa;
+    flex-shrink: 0;
+  }
+
+  .toolbar input[type="text"] {
+    flex: 1;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 4px;
+    color: #e2e8f0;
+    padding: 5px 10px;
+    font-size: 13px;
+  }
+  .toolbar input[type="text"]:focus { outline: none; border-color: #a78bfa; }
+
+  .toolbar .ws-label {
+    font-size: 12px;
+    color: #64748b;
+    flex-shrink: 0;
+  }
+
+  button {
+    background: #2d2d2d;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #e2e8f0;
+    padding: 5px 12px;
+    font-size: 12px;
+    transition: background 0.1s;
+    flex-shrink: 0;
+  }
+  button:hover:not(:disabled) { background: #3a3a3a; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.primary { background: #5b21b6; border-color: #7c3aed; }
+  button.primary:hover:not(:disabled) { background: #6d28d9; }
+
+  /* Status dot */
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #555;
+    flex-shrink: 0;
+  }
+  .status-dot.connected  { background: #34d399; }
+  .status-dot.connecting { background: #fbbf24; }
+
+  /* ── Viewport (fills remaining space) ─────────────── */
+  #viewport {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: #0a0a0a;
+    cursor: crosshair;
+  }
+  #viewport canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  #overlay {
+    position: absolute;
+    top: 10px; left: 12px;
+    font-size: 11px;
+    color: #64748b;
+    pointer-events: none;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    line-height: 1.6;
+  }
+
+  #crosshair {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 16px; height: 16px;
+    pointer-events: none;
+    opacity: 0.5;
+  }
+  #crosshair::before, #crosshair::after {
+    content: '';
+    position: absolute;
+    background: #fff;
+  }
+  #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
+  #crosshair::after  { height: 2px; width: 100%; top: 50%; transform: translateY(-50%); }
+</style>
+
+<!-- Import map: Three.js + glTF-Transform + AtriumClient -->
+<script type="importmap">
+{
+  "imports": {
+    "three":                            "https://esm.sh/three@0.163.0",
+    "three/addons/":                    "https://esm.sh/three@0.163.0/addons/",
+    "@gltf-transform/core":             "https://esm.sh/@gltf-transform/core@4.3.0",
+    "@gltf-transform/extensions":       "https://esm.sh/@gltf-transform/extensions@4.3.0",
+    "@gltf-transform/view":             "https://esm.sh/@gltf-transform/view@4.3.0?deps=three@0.163.0,@gltf-transform/core@4.3.0",
+    "@atrium/som":                      "../../packages/som/src/index.js",
+    "@atrium/protocol":                 "../../packages/protocol/src/index.js",
+    "@atrium/client":                   "../../packages/client/src/AtriumClient.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <h1>ATRIUM</h1>
+  <input id="worldUrl" type="text" value="../../tests/fixtures/space.gltf" placeholder=".gltf or .atrium.json URL" />
+  <button id="loadBtn" class="primary">Load</button>
+  <span class="ws-label">Server:</span>
+  <input id="wsUrl" type="text" value="ws://localhost:3000" style="width:180px" />
+  <button id="connectBtn">Connect</button>
+  <div class="status-dot" id="statusDot"></div>
+</div>
+
+<!-- Viewport -->
+<div id="viewport">
+  <div id="overlay">Click to capture mouse · WASD to move · Mouse to look · Esc to release</div>
+  <div id="crosshair"></div>
+</div>
+
+<script type="module" src="src/app.js"></script>
+</body>
+</html>

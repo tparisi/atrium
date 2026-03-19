@@ -2,10 +2,11 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "view (client)",
   "type": "object",
-  "required": ["type", "position"],
+  "required": ["type", "seq", "position"],
   "additionalProperties": false,
   "properties": {
     "type": { "const": "view" },
+    "seq": { "type": "integer", "minimum": 0 },
     "position": {
       "type": "array",
       "items": { "type": "number" },

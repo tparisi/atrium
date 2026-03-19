@@ -501,13 +501,13 @@ import { OrbitControls } from 'https://esm.sh/three@0.163.0/addons/controls/Orbi
 import { WebIO } from 'https://esm.sh/@gltf-transform/core@4.3.0'
 import { KHRONOS_EXTENSIONS } from 'https://esm.sh/@gltf-transform/extensions@4.3.0'
 import { DocumentView } from 'https://esm.sh/@gltf-transform/view@4.3.0?deps=three@0.163.0'
-import { SOMDocument } from '/client/som/index.js'
+import { SOMDocument } from './client/som/index.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const MANIFEST_PATH = '../fixtures/space.atrium.json'
-const FALLBACK_GLTF_PATH = '../fixtures/space.gltf'
+const MANIFEST_PATH = './fixtures/space.atrium.json'
+const FALLBACK_GLTF_PATH = './fixtures/space.gltf'
 const WALK_SPEED = 4                                    // units/second
 const WALK_EYE_Y = 1.7                                  // eye height in Walk mode
 const LOOK_SENSITIVITY = 0.2 * (Math.PI / 180)         // radians per pixel

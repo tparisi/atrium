@@ -1,0 +1,12 @@
+{
+  "name": "@atrium/app-client",
+  "version": "0.1.0",
+  "description": "Atrium browser UI shell — URL bar, Three.js viewport, first-person navigation, peer avatar rendering",
+  "license": "MIT",
+  "author": "Tony Parisi / Metatron Studio",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@atrium/client": "workspace:*"
+  }
+}

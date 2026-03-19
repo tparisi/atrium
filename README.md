@@ -98,22 +98,24 @@ atrium/
 │   ├── protocol/        # SOP message schemas (JSON Schema) and Ajv validator
 │   ├── som/             # Scene Object Model — DOM-inspired API over glTF-Transform
 │   ├── server/          # WebSocket world server (Node.js + glTF-Transform)
-│   ├── client/          # Browser client (Three.js + DocumentView) [coming]
+│   ├── client/          # AtriumClient — WebSocket lifecycle, SOP, SOM, avatar (no UI)
 │   └── gltf-extension/  # ATRIUM_world glTF extension definition [coming]
+├── apps/
+│   └── client/          # Browser UI shell — Three.js viewport, first-person nav
 ├── tools/
 │   └── protocol-inspector/   # Single-file interactive protocol debugger
 ├── tests/
+│   ├── client/          # Protocol-level test client and SOM inspector
 │   └── fixtures/
 │       └── space.gltf   # Minimal world fixture used by server tests
 └── docs/
     └── sessions/        # Claude Code session briefs — the build history
 ```
 
-The repo ships with working server, protocol, and SOM packages, a test world
-fixture, and a browser-based protocol inspector that lets you connect to
-a running server, send any SOP message, and watch the exchange in real time.
-There are 92 passing tests covering protocol validation, session lifecycle,
-world state mutations, presence, and the SOM API.
+The repo ships with working server, protocol, SOM, and client packages, a test
+world fixture, a browser-based protocol inspector, and the Atrium browser app.
+Tests cover protocol validation, session lifecycle, world state mutations,
+presence, the SOM API, and AtriumClient event lifecycle.
 
 This is a foundation, not a finished product. The client renderer, the
 object type registry, avatar embodiment, physics, and persistence are all
@@ -132,21 +134,30 @@ git clone https://github.com/tparisi/atrium.git
 cd atrium
 pnpm install
 
-# run the tests
+# run all tests
+pnpm test
+
+# or run package tests individually
 pnpm --filter @atrium/protocol test
 pnpm --filter @atrium/som test
 pnpm --filter @atrium/server test
+pnpm --filter @atrium/client test
 
 # start a world server
 cd packages/server
 WORLD_PATH=../../tests/fixtures/space.gltf node src/index.js
 
-# open the protocol inspector (from repo root)
+# open the Atrium browser app (static, no build step)
+open apps/client/index.html
+# → enter a .gltf URL, click Load to render statically
+# → enter ws://localhost:3000 and click Connect for multiplayer
+
+# open the protocol inspector (low-level SOP debugger)
 open tools/protocol-inspector/index.html
 ```
 
-Connect the inspector to `ws://localhost:3000`, send a `hello`, and watch
-the world come alive.
+The browser app loads any `.gltf` file and renders it. With a server running,
+click Connect to go multiplayer — move around and see other users' avatars.
 
 ---
 
@@ -161,7 +172,8 @@ the world come alive.
 | SOM — Scene Object Model (`@atrium/som`) | ✅ Complete |
 | Avatar nodes — SOM lifecycle, connect/disconnect | ✅ Complete |
 | NavigationInfo — mode, speed, updateRate | ✅ Complete |
-| Client renderer — Three.js | 🔄 In progress |
+| AtriumClient (`@atrium/client`) — WS lifecycle, SOM, avatar | ✅ Complete |
+| Browser app (`apps/client`) — Three.js viewport, first-person nav | ✅ Complete |
 | glTF extension (`@atrium/gltf-extension`) | 🔜 Upcoming |
 | User Object Extensions (`ATRIUM_user_object`) | 🔜 Upcoming |
 | Physics | 🔜 Upcoming |

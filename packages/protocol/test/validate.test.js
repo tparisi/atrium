@@ -287,14 +287,15 @@ describe('leave', () => {
 // ─── view ─────────────────────────────────────────────────────────
 
 describe('view (client)', () => {
-  it('validates a minimal client view — position only', () => {
-    const { valid } = validate('client', { type: 'view', position: [1, 0, 0] })
+  it('validates a minimal client view — seq and position', () => {
+    const { valid } = validate('client', { type: 'view', seq: 1, position: [1, 0, 0] })
     assert.equal(valid, true)
   })
 
   it('validates a client view with all optional fields', () => {
     const { valid } = validate('client', {
       type: 'view',
+      seq: 2,
       position: [1, 0, 0],
       look: [0, 0, -1],
       move: [1, 0, 0],
@@ -304,12 +305,22 @@ describe('view (client)', () => {
   })
 
   it('rejects client view missing position', () => {
-    const { valid } = validate('client', { type: 'view' })
+    const { valid } = validate('client', { type: 'view', seq: 1 })
     assert.equal(valid, false)
   })
 
   it('rejects client view with position wrong length', () => {
-    const { valid } = validate('client', { type: 'view', position: [1, 0] })
+    const { valid } = validate('client', { type: 'view', seq: 1, position: [1, 0] })
+    assert.equal(valid, false)
+  })
+
+  it('validates client view with seq passes validation', () => {
+    const { valid } = validate('client', { type: 'view', seq: 42, position: [0, 1.6, 4] })
+    assert.equal(valid, true)
+  })
+
+  it('rejects client view without seq', () => {
+    const { valid } = validate('client', { type: 'view', position: [1, 0, 0] })
     assert.equal(valid, false)
   })
 })

@@ -51,6 +51,9 @@ export class SOMDocument {
   // Scene graph entry point
   get scene() { return new SOMScene(this._root.listScenes()[0]) }
 
+  // Document accessor
+  get document() { return this._document; }
+
   // Node lookup
   getNodeByName(name) {
     const node = this._root.listNodes().find(n => n.getName() === name)

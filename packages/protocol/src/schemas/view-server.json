@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "properties": {
     "type": { "const": "view" },
+    "seq": { "type": "integer", "minimum": 0 },
     "id": { "type": "string", "minLength": 1 },
     "position": {
       "type": "array",
