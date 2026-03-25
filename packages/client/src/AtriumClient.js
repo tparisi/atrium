@@ -93,6 +93,12 @@ export class AtriumClient extends EventEmitter {
     this._lastSentAt     = 0
     this._viewSeq        = 0
     this._viewFlushTimer = null
+
+    // Outbound send sequence counter
+    this._sendSeq = 0
+
+    // Loopback prevention flag — true while applying a remote set
+    this._applyingRemote = false
   }
 
   // ---------------------------------------------------------------------------
@@ -117,7 +123,11 @@ export class AtriumClient extends EventEmitter {
     this._displayName    = `User-${shortId}`
     this._avatarNodeName = this._displayName
     this._avatarDescriptor = avatar ?? null
-
+    if (this._avatarDescriptor) {
+      this._avatarDescriptor.name = this._displayName
+      this._avatarDescriptor.extras = { ...this._avatarDescriptor.extras, displayName: this._displayName }
+    }
+    
     this._log(`Connecting to ${wsUrl}`)
 
     const ws = new this._WSImpl(wsUrl)
@@ -201,6 +211,7 @@ export class AtriumClient extends EventEmitter {
     const io  = makeWebIO()
     const doc = await io.read(url)
     this._initSom(doc)
+    this._attachMutationListeners()
     const meta = doc.getRoot().getExtras()?.atrium?.world ?? {}
     this._emitWorldLoaded(meta)
   }
@@ -222,7 +233,7 @@ export class AtriumClient extends EventEmitter {
   // Incoming message handlers
   // ---------------------------------------------------------------------------
 
-  async _onServerHello(msg) {
+  async _onServerHello(_msg) {
     this._connected = true
     console.log(`[AtriumClient] Session ${this._sessionId} (${this._displayName})`)
     this.emit('session:ready', {
@@ -235,6 +246,7 @@ export class AtriumClient extends EventEmitter {
     const io  = makeWebIO()
     const doc = await io.readJSON({ json: msg.gltf, resources: {} })
     this._initSom(doc)
+    this._attachMutationListeners()
 
     // Add own avatar to local SOM so it appears in tree and can be referenced
     if (this._avatarDescriptor && this._som) {
@@ -262,6 +274,7 @@ export class AtriumClient extends EventEmitter {
 
     const node = this._som.ingestNode(msg.node)
     this._som.scene.addChild(node)
+    this._attachNodeListeners(node)
 
     const nodeName = msg.node.name
     if (this._debug) this._log(`som:add "${nodeName}"`)
@@ -303,9 +316,18 @@ export class AtriumClient extends EventEmitter {
 
   _onSet(msg) {
     if (!this._som) return
-    const node = this._som.getNodeByName(msg.node)
-    if (!node) return
-    try { this._som.setPath(node, msg.field, msg.value) } catch {}
+    // Case 1: own echo — server reflected our send back; skip SOM update entirely
+    if (msg.session === this._sessionId) return
+
+    // Case 2: remote set — apply to SOM but guard against re-broadcast via mutation listener
+    this._applyingRemote = true
+    try {
+      const node = this._som.getNodeByName(msg.node)
+      if (node) this._som.setPath(node, msg.field, msg.value)
+    } finally {
+      this._applyingRemote = false
+    }
+
     if (this._debug) this._log(`som:set ${msg.node}.${msg.field}`)
     this.emit('som:set', { nodeName: msg.node, path: msg.field, value: msg.value })
   }
@@ -313,12 +335,17 @@ export class AtriumClient extends EventEmitter {
   _onView(msg) {
     if (!this._som) return
 
-    // Update peer avatar position/orientation in SOM
+    // Update peer avatar position/orientation in SOM — guard against re-broadcast
     const displayName = `User-${msg.id.slice(0, 4)}`
     const peerNode    = this._som.getNodeByName(displayName)
     if (peerNode) {
-      if (msg.position) peerNode.translation = msg.position
-      if (msg.look)     peerNode.rotation    = lookToQuaternion(msg.look)
+      this._applyingRemote = true
+      try {
+        if (msg.position) peerNode.translation = msg.position
+        if (msg.look)     peerNode.rotation    = lookToQuaternion(msg.look)
+      } finally {
+        this._applyingRemote = false
+      }
     }
 
     if (this._debug) this._log(`peer:view from ${displayName}`)
@@ -343,6 +370,76 @@ export class AtriumClient extends EventEmitter {
     // peer:leave is emitted from _onRemove; just clean up tracking here
     this._peerSessions.delete(msg.id)
     if (this._debug) this._log(`leave: ${msg.id}`)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mutation listener attachment
+  // ---------------------------------------------------------------------------
+
+  /** Attach mutation listeners to all nodes currently in the SOM. */
+  _attachMutationListeners() {
+    if (!this._som) return
+    for (const node of this._som.nodes) {
+      this._attachNodeListeners(node)
+    }
+  }
+
+  /**
+   * Attach mutation listeners to a single node and its mesh/primitive/material/camera
+   * subtree. The node name is captured in a closure — no IDs stored on SOM objects.
+   */
+  _attachNodeListeners(node) {
+    const nodeName = node.name
+
+    node.addEventListener('mutation', (event) => {
+      this._onLocalMutation(nodeName, event.detail.property, event.detail.value)
+    })
+
+    const mesh = node.mesh
+    if (mesh) {
+      mesh.addEventListener('mutation', (event) => {
+        if (!event.detail.property) return   // skip childList events on mesh
+        this._onLocalMutation(nodeName, `mesh.${event.detail.property}`, event.detail.value)
+      })
+
+      mesh.primitives.forEach((prim, i) => {
+        prim.addEventListener('mutation', (event) => {
+          if (!event.detail.property) return   // skip childList events
+          this._onLocalMutation(
+            nodeName,
+            `mesh.primitives[${i}].${event.detail.property}`,
+            event.detail.value
+          )
+        })
+
+        const material = prim.material
+        if (material) {
+          material.addEventListener('mutation', (event) => {
+            if (!event.detail.property) return
+            this._onLocalMutation(
+              nodeName,
+              `mesh.primitives[${i}].material.${event.detail.property}`,
+              event.detail.value
+            )
+          })
+        }
+      })
+    }
+
+    const camera = node.camera
+    if (camera) {
+      camera.addEventListener('mutation', (event) => {
+        if (!event.detail.property) return
+        this._onLocalMutation(nodeName, `camera.${event.detail.property}`, event.detail.value)
+      })
+    }
+  }
+
+  /** Called by mutation listeners — sends a `send` message to the server. */
+  _onLocalMutation(nodeName, path, value) {
+    if (this._applyingRemote) return
+    if (!this._connected) return
+    this._wsSend({ type: 'send', seq: ++this._sendSeq, node: nodeName, field: path, value })
   }
 
   // ---------------------------------------------------------------------------

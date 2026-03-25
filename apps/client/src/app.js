@@ -80,7 +80,8 @@ const peerMeshes = new Map()  // displayName → THREE.Mesh
 
 function buildCapsuleMesh() {
   const geo = new THREE.CapsuleGeometry(0.3, 0.8, 4, 8)
-  const mat = new THREE.MeshStandardMaterial({ color: 0x7fbfff })
+  const color = [Math.random() * 0.5 + 0.5, Math.random() * 0.5 + 0.5, Math.random() * 0.5 + 0.5, 1]
+  const mat = new THREE.MeshStandardMaterial({ color: color })
   const mesh = new THREE.Mesh(geo, mat)
   mesh.castShadow = true
   return mesh
@@ -129,8 +130,10 @@ function buildAvatarDescriptor(name) {
   const indices   = Array.from(geo.index.array)
   geo.dispose()
 
+  const color = [Math.random() * 0.5 + 0.5, Math.random() * 0.5 + 0.5, Math.random() * 0.5 + 0.5, 1]
+
   return {
-    name,
+//    name,
     translation: [0, 0.7, 0],
     extras: { displayName: name },
     mesh: {
@@ -139,7 +142,7 @@ function buildAvatarDescriptor(name) {
         indices,
         material: {
           pbrMetallicRoughness: {
-            baseColorFactor: [0.5, 0.7, 1.0, 1.0],
+            baseColorFactor: color,
             metallicFactor:  0.0,
             roughnessFactor: 0.7,
           },
@@ -154,6 +157,7 @@ function buildAvatarDescriptor(name) {
 // ---------------------------------------------------------------------------
 
 const client = new AtriumClient({ debug: false })
+window.atriumClient = client   // expose for manual console testing
 
 client.on('world:loaded', () => {
   if (client.som) initDocumentView(client.som)
@@ -208,8 +212,8 @@ connectBtn.addEventListener('click', () => {
   const wsUrl = wsUrlInput.value.trim()
   if (!wsUrl) return
   setStatus('connecting')
-  const { displayName } = deriveIdentity()
-  const avatar = buildAvatarDescriptor(displayName)
+//  const { displayName } = deriveIdentity()
+  const avatar = buildAvatarDescriptor()
   client.connect(wsUrl, { avatar })
 })
 

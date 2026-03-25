@@ -32,6 +32,7 @@ function resolvePath(somNode, segments) {
   return { target: current, key }
 }
 
+import { SOMObject }    from './SOMObject.js'
 import { SOMScene }     from './SOMScene.js'
 import { SOMNode }      from './SOMNode.js'
 import { SOMMesh }      from './SOMMesh.js'
@@ -42,46 +43,164 @@ import { SOMAnimation } from './SOMAnimation.js'
 import { SOMTexture }   from './SOMTexture.js'
 import { SOMSkin }      from './SOMSkin.js'
 
-export class SOMDocument {
+export class SOMDocument extends SOMObject {
   constructor(document) {
+    super()
     this._document = document
     this._root     = document.getRoot()
+
+    // Maps keyed by glTF-Transform object — for wiring during construction and ingest
+    this._materialMap  = new Map()
+    this._meshMap      = new Map()
+    this._cameraMap    = new Map()
+    this._nodeMap      = new Map()
+    this._primitiveMap = new Map()
+    this._animationMap = new Map()
+    this._textureMap   = new Map()
+    this._skinMap      = new Map()
+    this._sceneMap     = new Map()
+
+    // Map keyed by name — for fast O(1) node lookup
+    this._nodesByName  = new Map()
+
+    this._buildObjectGraph()
   }
 
-  // Scene graph entry point
-  get scene() { return new SOMScene(this._root.listScenes()[0]) }
+  // ---------------------------------------------------------------------------
+  // Build full object graph bottom-up
+  // ---------------------------------------------------------------------------
 
+  _buildObjectGraph() {
+    // Textures (no dependencies)
+    for (const t of this._root.listTextures()) {
+      this._textureMap.set(t, new SOMTexture(t))
+    }
+
+    // Materials
+    for (const m of this._root.listMaterials()) {
+      this._materialMap.set(m, new SOMMaterial(m))
+    }
+
+    // Meshes + primitives
+    for (const mesh of this._root.listMeshes()) {
+      const somMesh = new SOMMesh(mesh)
+      this._meshMap.set(mesh, somMesh)
+      somMesh._prims = []
+      for (const prim of mesh.listPrimitives()) {
+        const somPrim = new SOMPrimitive(prim)
+        this._primitiveMap.set(prim, somPrim)
+        somMesh._prims.push(somPrim)
+        const mat = prim.getMaterial()
+        if (mat) somPrim._material = this._materialMap.get(mat) ?? null
+      }
+    }
+
+    // Cameras
+    for (const c of this._root.listCameras()) {
+      this._cameraMap.set(c, new SOMCamera(c))
+    }
+
+    // Skins
+    for (const s of this._root.listSkins()) {
+      this._skinMap.set(s, new SOMSkin(s))
+    }
+
+    // Animations
+    for (const a of this._root.listAnimations()) {
+      this._animationMap.set(a, new SOMAnimation(a))
+    }
+
+    // Nodes — wire mesh, camera, skin
+    for (const n of this._root.listNodes()) {
+      const somNode = new SOMNode(n)
+      this._nodeMap.set(n, somNode)
+      this._nodesByName.set(n.getName(), somNode)
+      this._registerNodeDispose(n, somNode)
+      const m = n.getMesh()
+      if (m) somNode._mesh = this._meshMap.get(m) ?? null
+      const c = n.getCamera()
+      if (c) somNode._camera = this._cameraMap.get(c) ?? null
+      const sk = n.getSkin()
+      if (sk) somNode._skin = this._skinMap.get(sk) ?? null
+    }
+
+    // Scenes
+    for (const sc of this._root.listScenes()) {
+      this._sceneMap.set(sc, new SOMScene(sc))
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal helpers
+  // ---------------------------------------------------------------------------
+
+  /** Register a dispose callback so the node removes itself from caches when disposed. */
+  _registerNodeDispose(gltfNode, somNode) {
+    const name = gltfNode.getName()
+    somNode._onDispose = () => {
+      this._nodeMap.delete(gltfNode)
+      this._nodesByName.delete(name)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Document accessor
-  get document() { return this._document; }
+  // ---------------------------------------------------------------------------
 
-  // Node lookup
-  getNodeByName(name) {
-    const node = this._root.listNodes().find(n => n.getName() === name)
-    return node ? new SOMNode(node) : null
+  get document() { return this._document }
+
+  // ---------------------------------------------------------------------------
+  // Scene graph entry point
+  // ---------------------------------------------------------------------------
+
+  get scene() {
+    const sc = this._root.listScenes()[0]
+    return sc ? (this._sceneMap.get(sc) ?? new SOMScene(sc)) : null
   }
 
-  // Collections
-  get nodes()      { return this._root.listNodes().map(n => new SOMNode(n)) }
-  get meshes()     { return this._root.listMeshes().map(m => new SOMMesh(m)) }
-  get materials()  { return this._root.listMaterials().map(m => new SOMMaterial(m)) }
-  get cameras()    { return this._root.listCameras().map(c => new SOMCamera(c)) }
-  get animations() { return this._root.listAnimations().map(a => new SOMAnimation(a)) }
-  get textures()   { return this._root.listTextures().map(t => new SOMTexture(t)) }
-  get skins()      { return this._root.listSkins().map(s => new SOMSkin(s)) }
+  // ---------------------------------------------------------------------------
+  // Node lookup (O(1) via name map)
+  // ---------------------------------------------------------------------------
 
-  // Factories
+  getNodeByName(name) {
+    return this._nodesByName.get(name) ?? null
+  }
+
+  // ---------------------------------------------------------------------------
+  // Collections — return cached wrapper instances
+  // ---------------------------------------------------------------------------
+
+  get nodes()      { return Array.from(this._nodesByName.values()) }
+  get meshes()     { return Array.from(this._meshMap.values()) }
+  get materials()  { return Array.from(this._materialMap.values()) }
+  get cameras()    { return Array.from(this._cameraMap.values()) }
+  get animations() { return Array.from(this._animationMap.values()) }
+  get textures()   { return Array.from(this._textureMap.values()) }
+  get skins()      { return Array.from(this._skinMap.values()) }
+
+  // ---------------------------------------------------------------------------
+  // Factories — create + register in maps
+  // ---------------------------------------------------------------------------
+
   createNode(descriptor = {}) {
     const node = this._document.createNode(descriptor.name ?? '')
     if (descriptor.translation) node.setTranslation(descriptor.translation)
     if (descriptor.rotation)    node.setRotation(descriptor.rotation)
     if (descriptor.scale)       node.setScale(descriptor.scale)
     if (descriptor.extras)      node.setExtras(descriptor.extras)
-    return new SOMNode(node)
+    const somNode = new SOMNode(node)
+    this._nodeMap.set(node, somNode)
+    this._nodesByName.set(node.getName(), somNode)
+    this._registerNodeDispose(node, somNode)
+    return somNode
   }
 
   createMesh(descriptor = {}) {
-    const mesh = this._document.createMesh(descriptor.name ?? '')
-    return new SOMMesh(mesh)
+    const mesh    = this._document.createMesh(descriptor.name ?? '')
+    const somMesh = new SOMMesh(mesh)
+    somMesh._prims = []
+    this._meshMap.set(mesh, somMesh)
+    return somMesh
   }
 
   createMaterial(descriptor = {}) {
@@ -89,28 +208,38 @@ export class SOMDocument {
     if (descriptor.baseColorFactor !== undefined)  mat.setBaseColorFactor(descriptor.baseColorFactor)
     if (descriptor.metallicFactor  !== undefined)  mat.setMetallicFactor(descriptor.metallicFactor)
     if (descriptor.roughnessFactor !== undefined)  mat.setRoughnessFactor(descriptor.roughnessFactor)
-    return new SOMMaterial(mat)
+    const somMat = new SOMMaterial(mat)
+    this._materialMap.set(mat, somMat)
+    return somMat
   }
 
   createCamera(descriptor = {}) {
-    const cam = this._document.createCamera(descriptor.name ?? '')
+    const cam    = this._document.createCamera(descriptor.name ?? '')
     if (descriptor.type) cam.setType(descriptor.type)
-    return new SOMCamera(cam)
+    const somCam = new SOMCamera(cam)
+    this._cameraMap.set(cam, somCam)
+    return somCam
   }
 
   createPrimitive(descriptor = {}) {
-    const prim = this._document.createPrimitive()
-    return new SOMPrimitive(prim)
+    const prim    = this._document.createPrimitive()
+    const somPrim = new SOMPrimitive(prim)
+    this._primitiveMap.set(prim, somPrim)
+    return somPrim
   }
 
   // Stubs for v0.1
   createAnimation(descriptor = {}) {
-    const anim = this._document.createAnimation(descriptor.name ?? '')
-    return new SOMAnimation(anim)
+    const anim    = this._document.createAnimation(descriptor.name ?? '')
+    const somAnim = new SOMAnimation(anim)
+    this._animationMap.set(anim, somAnim)
+    return somAnim
   }
 
-  // Ingest a glTF node descriptor that may include mesh geometry data.
-  // Handles primitives with POSITION/NORMAL arrays and indices.
+  // ---------------------------------------------------------------------------
+  // ingestNode — create node + full mesh geometry, register everything in maps
+  // ---------------------------------------------------------------------------
+
   ingestNode(descriptor = {}) {
     const node = this._document.createNode(descriptor.name ?? '')
     if (descriptor.translation) node.setTranslation(descriptor.translation)
@@ -118,11 +247,21 @@ export class SOMDocument {
     if (descriptor.scale)       node.setScale(descriptor.scale)
     if (descriptor.extras)      node.setExtras(descriptor.extras)
 
+    const somNode = new SOMNode(node)
+    this._nodeMap.set(node, somNode)
+    this._nodesByName.set(node.getName(), somNode)
+    this._registerNodeDispose(node, somNode)
+
     if (descriptor.mesh) {
-      const mesh = this._document.createMesh(descriptor.mesh.name ?? '')
+      const mesh    = this._document.createMesh(descriptor.mesh.name ?? '')
+      const somMesh = new SOMMesh(mesh)
+      somMesh._prims = []
+      this._meshMap.set(mesh, somMesh)
+      somNode._mesh = somMesh
+
       for (const primDesc of descriptor.mesh.primitives ?? []) {
-        const prim  = this._document.createPrimitive()
-        const buf   = this._document.createBuffer()
+        const prim = this._document.createPrimitive()
+        const buf  = this._document.createBuffer()
 
         if (Array.isArray(primDesc.attributes?.POSITION)) {
           const acc = this._document.createAccessor()
@@ -148,12 +287,19 @@ export class SOMDocument {
           prim.setIndices(acc)
         }
 
+        const somPrim = new SOMPrimitive(prim)
+        this._primitiveMap.set(prim, somPrim)
+        somMesh._prims.push(somPrim)
+
         if (primDesc.material) {
           const mat = this._document.createMaterial()
           const pbr = primDesc.material.pbrMetallicRoughness
-          if (pbr?.baseColorFactor)             mat.setBaseColorFactor(pbr.baseColorFactor)
+          if (pbr?.baseColorFactor)              mat.setBaseColorFactor(pbr.baseColorFactor)
           if (pbr?.metallicFactor  !== undefined) mat.setMetallicFactor(pbr.metallicFactor)
           if (pbr?.roughnessFactor !== undefined) mat.setRoughnessFactor(pbr.roughnessFactor)
+          const somMat = new SOMMaterial(mat)
+          this._materialMap.set(mat, somMat)
+          somPrim._material = somMat
           prim.setMaterial(mat)
         }
 
@@ -162,10 +308,13 @@ export class SOMDocument {
       node.setMesh(mesh)
     }
 
-    return new SOMNode(node)
+    return somNode
   }
 
+  // ---------------------------------------------------------------------------
   // Path resolution
+  // ---------------------------------------------------------------------------
+
   getPath(somNode, path) {
     const segments = parsePath(path)
     const { target, key } = resolvePath(somNode, segments)

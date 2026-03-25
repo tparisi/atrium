@@ -185,6 +185,7 @@ export function createSessionServer({ port = 3000, maxUsers = 100, world = null 
             field: msg.field,
             value: msg.value,
             serverTime: Date.now(),
+            session: session.id,
           })
           break
         }

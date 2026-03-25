@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Tony Parisi / Metatron Studio. See LICENSE in repo root.
 
-export class SOMAnimation {
+import { SOMObject } from './SOMObject.js'
+import { SOMEvent }  from './SOMEvent.js'
+
+export class SOMAnimation extends SOMObject {
   constructor(animation) {
+    super()
     this._animation = animation
     this._loop      = false
     this._timeScale = 1.0
@@ -13,9 +17,19 @@ export class SOMAnimation {
   get extras()     { return this._animation.getExtras() }
 
   get loop()       { return this._loop }
-  set loop(v)      { this._loop = v }
+  set loop(v)      {
+    this._loop = v
+    if (this._hasListeners('mutation')) {
+      this._dispatchEvent(new SOMEvent('mutation', { target: this, property: 'loop', value: v }))
+    }
+  }
   get timeScale()  { return this._timeScale }
-  set timeScale(v) { this._timeScale = v }
+  set timeScale(v) {
+    this._timeScale = v
+    if (this._hasListeners('mutation')) {
+      this._dispatchEvent(new SOMEvent('mutation', { target: this, property: 'timeScale', value: v }))
+    }
+  }
 
   // Read-only data from glTF-Transform
   get channels()   { return this._animation.listChannels() }
@@ -23,7 +37,7 @@ export class SOMAnimation {
 
   // Playback — requires AnimationMixer on client; stubs on server
   play()           { this._state = 'playing' }
-  stop()           { this._state = 'stopped'; }
+  stop()           { this._state = 'stopped' }
   getState()       { return this._state }
   setWeight(_v)    { /* stub — requires AnimationMixer */ }
 }

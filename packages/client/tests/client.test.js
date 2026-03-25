@@ -6,9 +6,11 @@ import assert from 'node:assert/strict'
 import { fileURLToPath } from 'url'
 import { dirname, resolve } from 'path'
 import WebSocket from 'ws'
+import { Document } from '@gltf-transform/core'
 import { createSessionServer } from '../../server/src/session.js'
 import { createWorld } from '../../server/src/world.js'
 import { AtriumClient } from '../src/AtriumClient.js'
+import { SOMDocument } from '../../som/src/SOMDocument.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const FIXTURE_PATH = resolve(__dirname, '../../../tests/fixtures/space.gltf')
@@ -436,4 +438,128 @@ test('two clients connect → one disconnects → other receives peer:leave and 
     client2.disconnect()
     await closeServer(server)
   }
+})
+
+// ---------------------------------------------------------------------------
+// AtriumClient mutation sync — unit tests with mock WebSocket
+// ---------------------------------------------------------------------------
+
+// Minimal mock WebSocket that records sent messages and allows injecting inbound ones.
+// Must be constructed via connect() so that AtriumClient registers its message handlers.
+class MockWebSocket {
+  constructor() {
+    this.readyState = 1   // OPEN
+    this.sent       = []
+    this._handlers  = {}
+  }
+  on(event, fn) { (this._handlers[event] ??= []).push(fn); return this }
+  send(data)    { this.sent.push(JSON.parse(data)) }
+  close()       {}
+  _fire(event, ...args) {
+    for (const fn of this._handlers[event] ?? []) fn(...args)
+  }
+  simulateMessage(msg) { this._fire('message', JSON.stringify(msg)) }
+}
+
+// Build a minimal in-memory SOMDocument with one node that has a mesh + material.
+function makeSOMDocument() {
+  const doc  = new Document()
+  const mat  = doc.createMaterial('mat').setBaseColorFactor([1, 1, 1, 1])
+  const prim = doc.createPrimitive().setMaterial(mat)
+  const mesh = doc.createMesh('Mesh').addPrimitive(prim)
+  const node = doc.createNode('Crate').setMesh(mesh)
+  doc.createScene('Scene').addChild(node)
+  return new SOMDocument(doc)
+}
+
+// Wire a client with a mock WebSocket and a pre-built SOM (bypasses server handshake).
+// We call connect() so that AtriumClient registers its dispatch handler on the mock,
+// then manually set the connected state and SOM without going through the full handshake.
+function makeWiredClient() {
+  let mock
+  const client = new AtriumClient({
+    WebSocket: class {
+      constructor() { mock = new MockWebSocket(); return mock }
+    },
+  })
+  client.connect('ws://mock')
+  // connect() registered handlers on mock; now set state directly (skip server hello)
+  client._sessionId      = 'session-aabbccdd-0000-0000-0000-000000000001'
+  client._displayName    = 'User-sess'
+  client._connected      = true
+  client._som            = makeSOMDocument()
+  client._attachMutationListeners()
+  return { client, mock }
+}
+
+test('mutation-sync — local SOM property change → outbound send message', () => {
+  const { client, mock } = makeWiredClient()
+  const node = client.som.getNodeByName('Crate')
+  node.translation = [1, 2, 3]
+
+  const sendMsg = mock.sent.find(m => m.type === 'send')
+  assert.ok(sendMsg,                          'send message was emitted')
+  assert.strictEqual(sendMsg.node,  'Crate',  'correct node name')
+  assert.strictEqual(sendMsg.field, 'translation', 'correct field')
+  assert.deepEqual(sendMsg.value,   [1, 2, 3], 'correct value')
+  assert.ok(typeof sendMsg.seq === 'number',  'seq is present')
+})
+
+test('mutation-sync — inbound remote set → SOM updated, no outbound send', async () => {
+  const { client, mock } = makeWiredClient()
+  const sentBefore = mock.sent.length
+
+  // Simulate inbound set from a different session
+  mock.simulateMessage({
+    type: 'set', seq: 1,
+    node: 'Crate', field: 'translation', value: [5, 0, 0],
+    serverTime: Date.now(),
+    session: 'other-session-id',
+  })
+
+  // Give async dispatch a tick to complete
+  await new Promise(r => setImmediate(r))
+
+  // SOM should be updated
+  const node = client.som.getNodeByName('Crate')
+  assert.deepEqual([...node.translation], [5, 0, 0], 'SOM translation updated')
+
+  // No outbound send should have been emitted
+  const newSends = mock.sent.slice(sentBefore).filter(m => m.type === 'send')
+  assert.strictEqual(newSends.length, 0, 'no outbound send emitted (no loopback)')
+})
+
+test('mutation-sync — inbound own echo (same session) → SOM not touched', async () => {
+  const { client, mock } = makeWiredClient()
+  const node             = client.som.getNodeByName('Crate')
+  node.translation = [0, 0, 0]   // set a known baseline (also sends, but that's fine)
+  mock.sent.length = 0            // reset sent queue
+
+  // Simulate server echoing our own set back (session matches client)
+  mock.simulateMessage({
+    type: 'set', seq: 2,
+    node: 'Crate', field: 'translation', value: [99, 99, 99],
+    serverTime: Date.now(),
+    session: client._sessionId,
+  })
+
+  await new Promise(r => setImmediate(r))
+
+  // SOM should NOT have been updated (own echo ignored)
+  assert.deepEqual([...node.translation], [0, 0, 0], 'SOM unchanged after own echo')
+  // No outbound send from the ignored echo
+  assert.strictEqual(mock.sent.filter(m => m.type === 'send').length, 0)
+})
+
+test('mutation-sync — not connected → SOM change produces no outbound message', () => {
+  const mock   = new MockWebSocket()
+  const client = new AtriumClient({ WebSocket: class { constructor() { return mock } } })
+  client._som = makeSOMDocument()
+  client._attachMutationListeners()
+  // client._connected remains false
+
+  const node = client.som.getNodeByName('Crate')
+  node.translation = [7, 7, 7]
+
+  assert.strictEqual(mock.sent.filter(m => m.type === 'send').length, 0, 'no send when disconnected')
 })

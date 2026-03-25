@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Tony Parisi / Metatron Studio. See LICENSE in repo root.
 
-export class SOMTexture {
+import { SOMObject } from './SOMObject.js'
+
+export class SOMTexture extends SOMObject {
   constructor(texture) {
+    super()
     this._texture = texture
   }
 

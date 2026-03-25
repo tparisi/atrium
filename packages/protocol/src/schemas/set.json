@@ -10,7 +10,8 @@
     "node": { "type": "string", "minLength": 1 },
     "field": { "type": "string", "minLength": 1 },
     "value": {},
-    "serverTime": { "type": "integer", "minimum": 0 }
+    "serverTime": { "type": "integer", "minimum": 0 },
+    "session": { "type": "string", "minLength": 1 }
   },
   "additionalProperties": false
 }

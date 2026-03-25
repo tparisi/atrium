@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Tony Parisi / Metatron Studio. See LICENSE in repo root.
 
-import { SOMNode } from './SOMNode.js'
+import { SOMObject } from './SOMObject.js'
+import { SOMNode }   from './SOMNode.js'
 
-export class SOMSkin {
+export class SOMSkin extends SOMObject {
   constructor(skin) {
+    super()
     this._skin = skin
   }
 

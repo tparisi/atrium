@@ -82,7 +82,7 @@ test('view is broadcast to other clients with sender id', async () => {
   // consume join for A that B receives on connect
   await qB.waitForType('join', 300)
 
-  wsA.send(JSON.stringify({ type: 'view', position: [3, 0, 0] }))
+  wsA.send(JSON.stringify({ type: 'view', seq: 1, position: [3, 0, 0] }))
 
   const viewMsg = await qB.waitForType('view', 500)
 
@@ -102,7 +102,7 @@ test('view is NOT echoed back to sender', async () => {
   const qA = makeMessageQueue(wsA)
   await handshake(wsA, qA)
 
-  wsA.send(JSON.stringify({ type: 'view', position: [1, 0, 0] }))
+  wsA.send(JSON.stringify({ type: 'view', seq: 1, position: [1, 0, 0] }))
 
   const viewMsg = await qA.waitForType('view', 300)
   assert.equal(viewMsg, null, 'sender should not receive its own view message')
@@ -118,7 +118,7 @@ test('view updates presence position for sender', async () => {
   const helloA = await handshake(wsA, qA)
   const idA = helloA.id
 
-  wsA.send(JSON.stringify({ type: 'view', position: [5, 1, -2] }))
+  wsA.send(JSON.stringify({ type: 'view', seq: 1, position: [5, 1, -2] }))
 
   // Give server time to process
   await drainServer()
@@ -139,7 +139,7 @@ test('join bootstrap includes current position of existing clients', async () =>
   const idA = helloA.id
 
   // A moves to a known position
-  wsA.send(JSON.stringify({ type: 'view', position: [7, 0, 3] }))
+  wsA.send(JSON.stringify({ type: 'view', seq: 1, position: [7, 0, 3] }))
   await drainServer()
 
   // B connects — should receive a join for A with A's current position
@@ -193,7 +193,7 @@ test('view with optional fields (look, move, velocity) are relayed to other clie
   await qB.waitForType('join', 300)
 
   wsA.send(JSON.stringify({
-    type: 'view',
+    type: 'view', seq: 1,
     position: [1, 0, 0],
     look: [0, 0, -1],
     move: [1, 0, 0],
