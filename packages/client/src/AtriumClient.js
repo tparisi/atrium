@@ -108,6 +108,12 @@ export class AtriumClient extends EventEmitter {
   /** The live SOMDocument instance. Read-only for apps/client. */
   get som() { return this._som }
 
+  /** Connection status. Read-only for apps/client. */
+  get connected() { return this._connected }
+
+  /** The display name assigned in connect(). Null before connect(). */
+  get displayName() { return this._displayName }
+
   /**
    * Connect to a running Atrium server.
    * @param {string} wsUrl  - WebSocket URL, e.g. ws://localhost:3000
@@ -390,6 +396,9 @@ export class AtriumClient extends EventEmitter {
    */
   _attachNodeListeners(node) {
     const nodeName = node.name
+
+    // Skip local avatar — position communicated via view messages, not send
+    if (nodeName === this._avatarNodeName) return
 
     node.addEventListener('mutation', (event) => {
       this._onLocalMutation(nodeName, event.detail.property, event.detail.value)

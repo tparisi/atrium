@@ -45,6 +45,13 @@ threeScene.add(new THREE.GridHelper(40, 40, 0x333333, 0x222222))
 const camera = new THREE.PerspectiveCamera(70, 1, 0.01, 1000)
 camera.position.set(0, 1.6, 4)
 
+// ---------------------------------------------------------------------------
+// Third-person camera constants
+// ---------------------------------------------------------------------------
+
+const CAMERA_OFFSET_Y = 2.0   // meters above avatar
+const CAMERA_OFFSET_Z = 4.0   // meters behind avatar (+Z = behind in glTF right-handed)
+
 // Resize handler
 function onResize() {
   const w = viewportEl.clientWidth
@@ -159,9 +166,42 @@ function buildAvatarDescriptor(name) {
 const client = new AtriumClient({ debug: false })
 window.atriumClient = client   // expose for manual console testing
 
+// Local avatar and camera child nodes — set on session:ready
+let localAvatarNode  = null
+let localCameraNode  = null
+
 client.on('world:loaded', () => {
-  if (client.som) initDocumentView(client.som)
+  if (!client.som) return
+  initDocumentView(client.som)
+  if (client.connected)
+  {
+    const displayName = client.displayName
+    localAvatarNode = client.som.getNodeByName(displayName)
+    if (!localAvatarNode) return
+
+    // Create a local-only camera child node with third-person offset
+    localCameraNode = client.som.createNode({
+      name:        `${displayName}-camera`,
+      translation: [0, CAMERA_OFFSET_Y, CAMERA_OFFSET_Z],
+    })
+    localAvatarNode.addChild(localCameraNode)
+
+  }
 })
+
+client.on('session:ready', () => {
+/*  if (!client.som) return
+  const displayName = client.displayName
+  localAvatarNode = client.som.getNodeByName(displayName)
+  if (!localAvatarNode) return
+
+  // Create a local-only camera child node with third-person offset
+  localCameraNode = client.som.createNode({
+    name:        `${displayName}-camera`,
+    translation: [0, CAMERA_OFFSET_Y, CAMERA_OFFSET_Z],
+  })
+  localAvatarNode.addChild(localCameraNode)
+*/})
 
 client.on('peer:join', ({ displayName }) => {
   addPeerMesh(displayName)
@@ -288,35 +328,78 @@ let lastTick = performance.now()
 function tick(now) {
   requestAnimationFrame(tick)
 
-  const dt   = (now - lastTick) / 1000
-  lastTick   = now
+  const dt = (now - lastTick) / 1000
+  lastTick = now
 
-  // Update camera orientation
   const qYaw   = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
   const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch)
-  camera.quaternion.copy(qYaw).multiply(qPitch)
 
-  // Move camera
   const move = getMoveVector()
-  if (move) {
-    const speed   = SPEED * dt
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(qYaw)
-    const right   = new THREE.Vector3(1, 0, 0).applyQuaternion(qYaw)
-    camera.position.addScaledVector(forward, -move[2] * speed)
-    camera.position.addScaledVector(right,    move[0] * speed)
-    // Keep vertical navigation minimal in WALK mode
-    camera.position.y = Math.max(0.2, camera.position.y)
-  }
 
-  // Report view state to AtriumClient
-  const look     = getLookVector()
-  const position = [camera.position.x, camera.position.y, camera.position.z]
-  client.setView({
-    position,
-    look,
-    move:     move ?? [0, 0, 0],
-    velocity: move ? SPEED : 0,
-  })
+  if (localAvatarNode) {
+    // Navigation drives SOM nodes
+    localAvatarNode.rotation = [qYaw.x, qYaw.y, qYaw.z, qYaw.w]
+
+    if (move) {
+      const speed   = SPEED * dt
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(qYaw)
+      const right   = new THREE.Vector3(1, 0, 0).applyQuaternion(qYaw)
+      const pos     = localAvatarNode.translation ?? [0, 0.7, 0]
+      localAvatarNode.translation = [
+        pos[0] + forward.x * (-move[2] * speed) + right.x * (move[0] * speed),
+        Math.max(0.7, pos[1]),
+        pos[2] + forward.z * (-move[2] * speed) + right.z * (move[0] * speed),
+      ]
+    }
+
+    if (localCameraNode) {
+      localCameraNode.rotation = [qPitch.x, qPitch.y, qPitch.z, qPitch.w]
+    }
+
+    // Sync Three.js camera from SOM state (third-person)
+    const avatarPos = localAvatarNode.translation ?? [0, 0.7, 0]
+    const offset    = new THREE.Vector3(0, CAMERA_OFFSET_Y, CAMERA_OFFSET_Z)
+    offset.applyQuaternion(qYaw)
+    camera.position.set(
+      avatarPos[0] + offset.x,
+      avatarPos[1] + offset.y,
+      avatarPos[2] + offset.z,
+    )
+    const lookTarget = new THREE.Vector3(avatarPos[0], avatarPos[1] + 1.0, avatarPos[2])
+    camera.lookAt(lookTarget)
+    // Apply pitch tilt on top of lookAt
+    camera.rotateX(pitch)
+
+    // Report view state
+    const look     = getLookVector()
+    const avatarLook = [Math.sin(yaw), 0, -Math.cos(yaw)]
+    const position = [...avatarPos]
+    client.setView({
+      position,
+      avatarLook,
+      move:     move ?? [0, 0, 0],
+      velocity: move ? SPEED : 0,
+    })
+  } else {
+    // No avatar yet (static mode / pre-connect) — drive camera directly
+    camera.quaternion.copy(qYaw).multiply(qPitch)
+    if (move) {
+      const speed   = SPEED * dt
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(qYaw)
+      const right   = new THREE.Vector3(1, 0, 0).applyQuaternion(qYaw)
+      camera.position.addScaledVector(forward, -move[2] * speed)
+      camera.position.addScaledVector(right,    move[0] * speed)
+      camera.position.y = Math.max(0.2, camera.position.y)
+    }
+    const look     = getLookVector()
+    const position = [camera.position.x, camera.position.y, camera.position.z]
+    client.setView({
+      position,
+      look,
+      move:     move ?? [0, 0, 0],
+      velocity: move ? SPEED : 0,
+    })
+  }
 
   // Render
   // if (docView) docView.render()

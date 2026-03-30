@@ -563,3 +563,58 @@ test('mutation-sync — not connected → SOM change produces no outbound messag
 
   assert.strictEqual(mock.sent.filter(m => m.type === 'send').length, 0, 'no send when disconnected')
 })
+
+test('mutation-sync — avatar node excluded from mutation listeners → no send emitted', () => {
+  let mock
+  const client = new AtriumClient({
+    WebSocket: class { constructor() { mock = new MockWebSocket(); return mock } },
+  })
+  client.connect('ws://mock')
+  client._sessionId      = 'session-aabbccdd-0000-0000-0000-000000000002'
+  client._displayName    = 'User-avtr'
+  client._avatarNodeName = 'User-avtr'
+  client._connected      = true
+
+  // SOM with an avatar node and a regular node
+  const doc      = new Document()
+  const avatarGl = doc.createNode('User-avtr')
+  const crateGl  = doc.createNode('Crate')
+  doc.createScene('Scene').addChild(avatarGl).addChild(crateGl)
+  client._som = new SOMDocument(doc)
+  client._attachMutationListeners()
+  mock.sent.length = 0   // clear any sends from connect/construction
+
+  const avatarNode = client.som.getNodeByName('User-avtr')
+  avatarNode.translation = [1, 0.7, 2]
+
+  const sendMsgs = mock.sent.filter(m => m.type === 'send')
+  assert.strictEqual(sendMsgs.length, 0, 'no send emitted for avatar node mutation')
+})
+
+test('mutation-sync — non-avatar node mutation still produces send when avatar present', () => {
+  let mock
+  const client = new AtriumClient({
+    WebSocket: class { constructor() { mock = new MockWebSocket(); return mock } },
+  })
+  client.connect('ws://mock')
+  client._sessionId      = 'session-aabbccdd-0000-0000-0000-000000000003'
+  client._displayName    = 'User-avtr'
+  client._avatarNodeName = 'User-avtr'
+  client._connected      = true
+
+  const doc      = new Document()
+  const avatarGl = doc.createNode('User-avtr')
+  const crateGl  = doc.createNode('Crate')
+  doc.createScene('Scene').addChild(avatarGl).addChild(crateGl)
+  client._som = new SOMDocument(doc)
+  client._attachMutationListeners()
+  mock.sent.length = 0
+
+  const crateNode = client.som.getNodeByName('Crate')
+  crateNode.translation = [5, 0, 0]
+
+  const sendMsg = mock.sent.find(m => m.type === 'send' && m.node === 'Crate')
+  assert.ok(sendMsg,                                   'send emitted for non-avatar node')
+  assert.equal(sendMsg.field, 'translation',           'correct field')
+  assert.deepEqual(sendMsg.value, [5, 0, 0],           'correct value')
+})
