@@ -5,7 +5,9 @@ import * as THREE from 'three'
 import { WebIO } from '@gltf-transform/core'
 import { KHRONOS_EXTENSIONS } from '@gltf-transform/extensions'
 import { DocumentView } from '@gltf-transform/view'
-import { AtriumClient } from '@atrium/client'
+import { AtriumClient }        from '@atrium/client'
+import { AvatarController }    from '@atrium/client/AvatarController'
+import { NavigationController } from '@atrium/client/NavigationController'
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -76,7 +78,7 @@ onResize()
 // DocumentView — bridges SOM → Three.js
 // ---------------------------------------------------------------------------
 
-let docView = null
+let docView    = null
 let sceneGroup = null
 
 function initDocumentView(somDocument) {
@@ -89,58 +91,11 @@ function initDocumentView(somDocument) {
 }
 
 // ---------------------------------------------------------------------------
-// Peer avatar meshes (managed directly, bypassing DocumentView for v0.1)
-// ---------------------------------------------------------------------------
-
-const peerMeshes = new Map()  // displayName → THREE.Mesh
-
-function buildCapsuleMesh() {
-  const geo = new THREE.CapsuleGeometry(0.3, 0.8, 4, 8)
-  const color = [Math.random() * 0.5 + 0.5, Math.random() * 0.5 + 0.5, Math.random() * 0.5 + 0.5, 1]
-  const mat = new THREE.MeshStandardMaterial({ color: color })
-  const mesh = new THREE.Mesh(geo, mat)
-  mesh.castShadow = true
-  return mesh
-}
-
-function addPeerMesh(displayName) {
-  if (peerMeshes.has(displayName)) return
-  const mesh = buildCapsuleMesh()
-  mesh.position.set(0, 0.7, 0)
-  threeScene.add(mesh)
-  peerMeshes.set(displayName, mesh)
-}
-
-function removePeerMesh(displayName) {
-  const mesh = peerMeshes.get(displayName)
-  if (mesh) {
-    threeScene.remove(mesh)
-    mesh.geometry.dispose()
-    mesh.material.dispose()
-    peerMeshes.delete(displayName)
-  }
-}
-
-function updatePeerMesh(displayName, position, look) {
-  const mesh = peerMeshes.get(displayName)
-  if (!mesh) return
-  if (position) mesh.position.set(...position)
-  if (look) {
-    // Rotate Y-up capsule to face look direction
-    const target = new THREE.Vector3(...look)
-    const dummy  = new THREE.Object3D()
-    dummy.position.copy(mesh.position)
-    dummy.lookAt(dummy.position.clone().add(target))
-    mesh.quaternion.copy(dummy.quaternion)
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Avatar capsule descriptor (sent to server via AtriumClient)
 // ---------------------------------------------------------------------------
 
 function buildAvatarDescriptor(name) {
-  const geo     = new THREE.CapsuleGeometry(0.3, 0.8, 4, 8)
+  const geo       = new THREE.CapsuleGeometry(0.3, 0.8, 4, 8)
   const positions = Array.from(geo.attributes.position.array)
   const normals   = Array.from(geo.attributes.normal.array)
   const indices   = Array.from(geo.index.array)
@@ -174,7 +129,7 @@ function buildAvatarDescriptor(name) {
 
 function updateHud() {
   hudPeersEl.textContent = client.connected
-    ? `Peers: ${peerMeshes.size}`
+    ? `Peers: ${avatar.peerCount}`
     : ''
   hudYouEl.textContent = client.connected && client.displayName
     ? `You: ${client.displayName}`
@@ -204,15 +159,25 @@ function setConnectionState(state) {
 }
 
 // ---------------------------------------------------------------------------
-// AtriumClient
+// AtriumClient + AvatarController + NavigationController
 // ---------------------------------------------------------------------------
 
 const client = new AtriumClient({ debug: false })
 window.atriumClient = client   // expose for manual console testing
 
-// Local avatar and camera child nodes — set on world:loaded (when connected)
-let localAvatarNode  = null
-let localCameraNode  = null
+const avatar = new AvatarController(client, {
+  cameraOffsetY: CAMERA_OFFSET_Y,
+  cameraOffsetZ: CAMERA_OFFSET_Z,
+})
+
+const nav = new NavigationController(avatar, {
+  mode:             'WALK',
+  mouseSensitivity: 0.002,
+})
+
+// ---------------------------------------------------------------------------
+// Client event listeners
+// ---------------------------------------------------------------------------
 
 client.on('world:loaded', ({ name, description, author }) => {
   if (!client.som) return
@@ -224,19 +189,6 @@ client.on('world:loaded', ({ name, description, author }) => {
   // Console metadata
   console.log(`[app] World: ${name ?? '(unnamed)'}${author ? ` by ${author}` : ''}`)
   if (description) console.log(`[app]   ${description}`)
-
-  if (client.connected) {
-    const displayName = client.displayName
-    localAvatarNode = client.som.getNodeByName(displayName)
-    if (!localAvatarNode) return
-
-    // Create a local-only camera child node with third-person offset
-    localCameraNode = client.som.createNode({
-      name:        `${displayName}-camera`,
-      translation: [0, CAMERA_OFFSET_Y, CAMERA_OFFSET_Z],
-    })
-    localAvatarNode.addChild(localCameraNode)
-  }
 })
 
 client.on('session:ready', () => {
@@ -244,30 +196,31 @@ client.on('session:ready', () => {
   updateHud()
 })
 
-client.on('peer:join', ({ displayName }) => {
-  addPeerMesh(displayName)
-  updateHud()
-  console.log(`[app] Peer joined: ${displayName} (${peerMeshes.size} peer${peerMeshes.size === 1 ? '' : 's'})`)
-})
-
-client.on('peer:leave', ({ displayName }) => {
-  removePeerMesh(displayName)
-  updateHud()
-  console.log(`[app] Peer left: ${displayName} (${peerMeshes.size} peer${peerMeshes.size === 1 ? '' : 's'})`)
-})
-
-client.on('peer:view', ({ displayName, position, look }) => {
-  updatePeerMesh(displayName, position, look)
-})
-
 client.on('disconnected', () => {
-  localAvatarNode = null
-  localCameraNode = null
   setConnectionState('disconnected')
 })
+
 client.on('error', (err) => {
   console.error('[app] client error:', err)
   setConnectionState('error')
+})
+
+// ---------------------------------------------------------------------------
+// Avatar controller event listeners
+// ---------------------------------------------------------------------------
+
+avatar.on('avatar:local-ready', () => {
+  updateHud()
+})
+
+avatar.on('avatar:peer-added', ({ displayName }) => {
+  console.log(`[app] Peer joined: ${displayName} (${avatar.peerCount} peer${avatar.peerCount === 1 ? '' : 's'})`)
+  updateHud()
+})
+
+avatar.on('avatar:peer-removed', ({ displayName }) => {
+  console.log(`[app] Peer left: ${displayName} (${avatar.peerCount} peer${avatar.peerCount === 1 ? '' : 's'})`)
+  updateHud()
 })
 
 // ---------------------------------------------------------------------------
@@ -300,22 +253,16 @@ connectBtn.addEventListener('click', () => {
   const wsUrl = wsUrlInput.value.trim()
   if (!wsUrl) return
   setConnectionState('connecting')
-  const avatar = buildAvatarDescriptor()
-  client.connect(wsUrl, { avatar })
+  const avatarDesc = buildAvatarDescriptor()
+  client.connect(wsUrl, { avatar: avatarDesc })
 })
 
 // ---------------------------------------------------------------------------
-// Navigation
+// Navigation — delegate input to NavigationController
 // ---------------------------------------------------------------------------
 
-const keys      = new Set()
-let yaw         = 0    // radians
-let pitch       = 0    // radians, clamped
 let pointerLock = false
 let dragging    = false
-
-const SPEED   = 1.4  // m/s default
-const TICK_MS = 1000 / 60
 
 if (USE_POINTER_LOCK) {
   viewportEl.addEventListener('click', () => { viewportEl.requestPointerLock() })
@@ -324,48 +271,23 @@ if (USE_POINTER_LOCK) {
   })
   document.addEventListener('mousemove', (e) => {
     if (!pointerLock) return
-    yaw   -= e.movementX * 0.002
-    pitch -= e.movementY * 0.002
-    pitch  = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, pitch))
+    nav.onMouseMove(e.movementX, e.movementY)
   })
 } else {
   viewportEl.addEventListener('mousedown', () => { dragging = true })
   document.addEventListener('mouseup',     () => { dragging = false })
   document.addEventListener('mousemove',   (e) => {
     if (!dragging) return
-    yaw   -= e.movementX * 0.002
-    pitch -= e.movementY * 0.002
-    pitch  = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, pitch))
+    nav.onMouseMove(e.movementX, e.movementY)
   })
 }
 
-document.addEventListener('keydown', (e) => { keys.add(e.code) })
-document.addEventListener('keyup',   (e) => { keys.delete(e.code) })
+document.addEventListener('keydown', (e) => nav.onKeyDown(e.code))
+document.addEventListener('keyup',   (e) => nav.onKeyUp(e.code))
 
-// Euler → look vector (glTF forward is -Z)
-function getLookVector() {
-  const x = Math.sin(yaw) * Math.cos(pitch)
-  const y = Math.sin(pitch)
-  const z = -Math.cos(yaw) * Math.cos(pitch)
-  return [x, y, z]
-}
-
-function getMoveVector() {
-  const fwd = keys.has('KeyW') || keys.has('ArrowUp')
-  const bwd = keys.has('KeyS') || keys.has('ArrowDown')
-  const lft = keys.has('KeyA') || keys.has('ArrowLeft')
-  const rgt = keys.has('KeyD') || keys.has('ArrowRight')
-
-  let dx = 0, dz = 0
-  if (fwd) dz -= 1
-  if (bwd) dz += 1
-  if (lft) dx -= 1
-  if (rgt) dx += 1
-
-  const len = Math.sqrt(dx * dx + dz * dz)
-  if (len === 0) return null
-  return [dx / len, 0, dz / len]
-}
+// ---------------------------------------------------------------------------
+// Tick loop
+// ---------------------------------------------------------------------------
 
 let lastTick = performance.now()
 
@@ -375,76 +297,40 @@ function tick(now) {
   const dt = (now - lastTick) / 1000
   lastTick = now
 
-  const qYaw   = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
-  const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch)
+  // NavigationController updates SOM nodes and calls avatar.setView
+  nav.tick(dt)
 
-  const move = getMoveVector()
+  // Sync Three.js camera from SOM state (stays in app.js)
+  const localNode  = avatar.localNode
+  const cameraNode = avatar.cameraNode
+  if (localNode && cameraNode) {
+    const yaw   = nav.yaw
+    const pitch = nav.pitch
+    const qYaw   = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
+    const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch)
+    const avatarPos = localNode.translation ?? [0, 0, 0]
+    const camOffset = cameraNode.translation ?? [0, 0, 0]
+    const hasOffset = Math.abs(camOffset[1]) > 0.001 || Math.abs(camOffset[2]) > 0.001
 
-  if (localAvatarNode) {
-    // Navigation drives SOM nodes
-    localAvatarNode.rotation = [qYaw.x, qYaw.y, qYaw.z, qYaw.w]
-
-    if (move) {
-      const speed   = SPEED * dt
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(qYaw)
-      const right   = new THREE.Vector3(1, 0, 0).applyQuaternion(qYaw)
-      const pos     = localAvatarNode.translation ?? [0, 0.7, 0]
-      localAvatarNode.translation = [
-        pos[0] + forward.x * (-move[2] * speed) + right.x * (move[0] * speed),
-        Math.max(0.7, pos[1]),
-        pos[2] + forward.z * (-move[2] * speed) + right.z * (move[0] * speed),
-      ]
+    if (hasOffset) {
+      // Third-person: offset camera behind and above avatar, look at avatar head
+      const offset = new THREE.Vector3(0, CAMERA_OFFSET_Y, CAMERA_OFFSET_Z)
+      offset.applyQuaternion(qYaw)
+      camera.position.set(
+        avatarPos[0] + offset.x,
+        avatarPos[1] + offset.y,
+        avatarPos[2] + offset.z,
+      )
+      const lookTarget = new THREE.Vector3(avatarPos[0], avatarPos[1] + 1.0, avatarPos[2])
+      camera.lookAt(lookTarget)
+      camera.rotateX(pitch)
+    } else {
+      // First-person (static mode): camera at avatar position, direct yaw+pitch
+      camera.position.set(avatarPos[0], avatarPos[1], avatarPos[2])
+      camera.quaternion.copy(qYaw).multiply(qPitch)
     }
-
-    if (localCameraNode) {
-      localCameraNode.rotation = [qPitch.x, qPitch.y, qPitch.z, qPitch.w]
-    }
-
-    // Sync Three.js camera from SOM state (third-person)
-    const avatarPos = localAvatarNode.translation ?? [0, 0.7, 0]
-    const offset    = new THREE.Vector3(0, CAMERA_OFFSET_Y, CAMERA_OFFSET_Z)
-    offset.applyQuaternion(qYaw)
-    camera.position.set(
-      avatarPos[0] + offset.x,
-      avatarPos[1] + offset.y,
-      avatarPos[2] + offset.z,
-    )
-    const lookTarget = new THREE.Vector3(avatarPos[0], avatarPos[1] + 1.0, avatarPos[2])
-    camera.lookAt(lookTarget)
-    // Apply pitch tilt on top of lookAt
-    camera.rotateX(pitch)
-
-    // Report view state
-    const avatarLook = [Math.sin(yaw), 0, -Math.cos(yaw)]
-    const position   = [...avatarPos]
-    client.setView({
-      position,
-      look:     avatarLook,
-      move:     move ?? [0, 0, 0],
-      velocity: move ? SPEED : 0,
-    })
-  } else {
-    // No avatar yet (static mode / pre-connect) — drive camera directly
-    camera.quaternion.copy(qYaw).multiply(qPitch)
-    if (move) {
-      const speed   = SPEED * dt
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(qYaw)
-      const right   = new THREE.Vector3(1, 0, 0).applyQuaternion(qYaw)
-      camera.position.addScaledVector(forward, -move[2] * speed)
-      camera.position.addScaledVector(right,    move[0] * speed)
-      camera.position.y = Math.max(0.2, camera.position.y)
-    }
-    const look     = getLookVector()
-    const position = [camera.position.x, camera.position.y, camera.position.z]
-    client.setView({
-      position,
-      look,
-      move:     move ?? [0, 0, 0],
-      velocity: move ? SPEED : 0,
-    })
   }
 
-  // Render
   // if (docView) docView.render()
   renderer.render(threeScene, camera)
 }

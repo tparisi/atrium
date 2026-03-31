@@ -132,6 +132,7 @@ export class AtriumClient extends EventEmitter {
     if (this._avatarDescriptor) {
       this._avatarDescriptor.name = this._displayName
       this._avatarDescriptor.extras = { ...this._avatarDescriptor.extras, displayName: this._displayName }
+      this._avatarDescriptor.extras.atrium = { ...(this._avatarDescriptor.extras.atrium ?? {}), ephemeral: true }
     }
     
     this._log(`Connecting to ${wsUrl}`)
