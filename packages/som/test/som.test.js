@@ -567,3 +567,57 @@ test('mutation — no error when setter fires with no listeners', () => {
   const node = som.getNodeByName('Crate')
   assert.doesNotThrow(() => { node.translation = [1, 1, 1] })
 })
+
+// ---------------------------------------------------------------------------
+// Wrapper identity — scene graph traversal (Session-20 regression tests)
+// These verify that .children / .parent return the cached SOMDocument
+// instances rather than freshly-allocated wrappers.
+// ---------------------------------------------------------------------------
+
+test('wrapper-identity — scene.children returns same instances as getNodeByName', async () => {
+  const som      = await loadSOM()
+  const children = som.scene.children
+  for (const child of children) {
+    const byName = som.getNodeByName(child.name)
+    assert.strictEqual(child, byName, `scene.children "${child.name}" !== getNodeByName result`)
+  }
+})
+
+test('wrapper-identity — node.children returns same instances as getNodeByName', async () => {
+  const som = await loadSOM()
+  // Walk all nodes; any that have children must return cached wrappers
+  for (const node of som.nodes) {
+    for (const child of node.children) {
+      const byName = som.getNodeByName(child.name)
+      if (byName !== null) {
+        assert.strictEqual(child, byName, `node.children "${child.name}" !== getNodeByName result`)
+      }
+    }
+  }
+})
+
+test('wrapper-identity — node.mesh returns same instance as som.meshes entry', async () => {
+  const som   = await loadSOM()
+  const meshSet = new Set(som.meshes)
+  for (const node of som.nodes) {
+    if (node.mesh !== null) {
+      assert.ok(meshSet.has(node.mesh), `node.mesh for "${node.name}" is not a cached instance`)
+    }
+  }
+})
+
+test('wrapper-identity — mutation listener on getNodeByName fires when same node mutated via scene.children', async () => {
+  const som    = await loadSOM()
+  const scene  = som.scene
+  // Find a child that is also in the name map
+  const child  = scene.children.find(c => som.getNodeByName(c.name) !== null)
+  assert.ok(child, 'fixture has at least one named scene child')
+  const byName = som.getNodeByName(child.name)
+  // They must be the same wrapper instance for the listener to fire
+  assert.strictEqual(child, byName)
+  let fired = false
+  byName.addEventListener('mutation', () => { fired = true })
+  // Mutate through the traversal-acquired reference
+  child.translation = [0, 0, 0]
+  assert.strictEqual(fired, true, 'mutation listener on getNodeByName instance fired via scene.children reference')
+})

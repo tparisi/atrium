@@ -128,9 +128,7 @@ export class TreeView {
     const el = document.createElement('div')
     el.className = 'tree-children'
     for (const child of children) {
-      // Use stable SOMDocument-registered instance so mutation listeners are intact
-      const stableNode = som.getNodeByName(child.name) ?? child
-      el.appendChild(this._buildNodeItem(stableNode, som))
+      el.appendChild(this._buildNodeItem(child, som))
     }
     return el
   }

@@ -8,12 +8,13 @@ import { SOMCamera } from './SOMCamera.js'
 import { SOMSkin }   from './SOMSkin.js'
 
 export class SOMNode extends SOMObject {
-  constructor(node) {
+  constructor(node, document = null) {
     super()
-    this._node   = node
-    this._mesh   = undefined   // wired by SOMDocument; undefined = not yet cached
-    this._camera = undefined
-    this._skin   = undefined
+    this._node     = node
+    this._document = document
+    this._mesh     = undefined   // wired by SOMDocument; undefined = not yet cached
+    this._camera   = undefined
+    this._skin     = undefined
   }
 
   // Identity
@@ -70,7 +71,8 @@ export class SOMNode extends SOMObject {
   get mesh() {
     if (this._mesh !== undefined) return this._mesh
     const m = this._node.getMesh()
-    return m ? new SOMMesh(m) : null
+    if (!m) return null
+    return (this._document ? this._document._resolveMesh(m) : null) ?? new SOMMesh(m)
   }
   set mesh(v) {
     this._mesh = v ?? null
@@ -83,7 +85,8 @@ export class SOMNode extends SOMObject {
   get camera() {
     if (this._camera !== undefined) return this._camera
     const c = this._node.getCamera()
-    return c ? new SOMCamera(c) : null
+    if (!c) return null
+    return (this._document ? this._document._resolveCamera(c) : null) ?? new SOMCamera(c)
   }
   set camera(v) {
     this._camera = v ?? null
@@ -96,14 +99,20 @@ export class SOMNode extends SOMObject {
   get skin() {
     if (this._skin !== undefined) return this._skin
     const s = this._node.getSkin()
-    return s ? new SOMSkin(s) : null
+    if (!s) return null
+    return (this._document ? this._document._resolveSkin(s) : null) ?? new SOMSkin(s)
   }
 
   // Scene graph
-  get children() { return this._node.listChildren().map(n => new SOMNode(n)) }
+  get children() {
+    return this._node.listChildren().map(n =>
+      (this._document ? this._document._resolveNode(n) : null) ?? new SOMNode(n)
+    )
+  }
   get parent() {
     const p = this._node.getParentNode()
-    return p ? new SOMNode(p) : null
+    if (!p) return null
+    return (this._document ? this._document._resolveNode(p) : null) ?? new SOMNode(p)
   }
 
   addChild(node) {

@@ -83,11 +83,11 @@ export class SOMDocument extends SOMObject {
 
     // Meshes + primitives
     for (const mesh of this._root.listMeshes()) {
-      const somMesh = new SOMMesh(mesh)
+      const somMesh = new SOMMesh(mesh, this)
       this._meshMap.set(mesh, somMesh)
       somMesh._prims = []
       for (const prim of mesh.listPrimitives()) {
-        const somPrim = new SOMPrimitive(prim)
+        const somPrim = new SOMPrimitive(prim, this)
         this._primitiveMap.set(prim, somPrim)
         somMesh._prims.push(somPrim)
         const mat = prim.getMaterial()
@@ -102,7 +102,7 @@ export class SOMDocument extends SOMObject {
 
     // Skins
     for (const s of this._root.listSkins()) {
-      this._skinMap.set(s, new SOMSkin(s))
+      this._skinMap.set(s, new SOMSkin(s, this))
     }
 
     // Animations
@@ -112,7 +112,7 @@ export class SOMDocument extends SOMObject {
 
     // Nodes — wire mesh, camera, skin
     for (const n of this._root.listNodes()) {
-      const somNode = new SOMNode(n)
+      const somNode = new SOMNode(n, this)
       this._nodeMap.set(n, somNode)
       this._nodesByName.set(n.getName(), somNode)
       this._registerNodeDispose(n, somNode)
@@ -126,7 +126,7 @@ export class SOMDocument extends SOMObject {
 
     // Scenes
     for (const sc of this._root.listScenes()) {
-      this._sceneMap.set(sc, new SOMScene(sc))
+      this._sceneMap.set(sc, new SOMScene(sc, this))
     }
   }
 
@@ -155,7 +155,7 @@ export class SOMDocument extends SOMObject {
 
   get scene() {
     const sc = this._root.listScenes()[0]
-    return sc ? (this._sceneMap.get(sc) ?? new SOMScene(sc)) : null
+    return sc ? (this._sceneMap.get(sc) ?? new SOMScene(sc, this)) : null
   }
 
   // ---------------------------------------------------------------------------
@@ -179,6 +179,20 @@ export class SOMDocument extends SOMObject {
   get skins()      { return Array.from(this._skinMap.values()) }
 
   // ---------------------------------------------------------------------------
+  // Private cache resolution helpers — resolve glTF-Transform objects to the
+  // single cached SOM wrapper instance registered at build/ingest time.
+  // Used by child accessors in SOMScene, SOMNode, SOMSkin, SOMMesh, SOMPrimitive
+  // to guarantee wrapper identity and preserve mutation listener wiring.
+  // ---------------------------------------------------------------------------
+
+  _resolveNode(n)     { return this._nodeMap.get(n)      ?? null }
+  _resolveMesh(m)     { return this._meshMap.get(m)      ?? null }
+  _resolveCamera(c)   { return this._cameraMap.get(c)    ?? null }
+  _resolvePrimitive(p){ return this._primitiveMap.get(p) ?? null }
+  _resolveMaterial(m) { return this._materialMap.get(m)  ?? null }
+  _resolveSkin(s)     { return this._skinMap.get(s)      ?? null }
+
+  // ---------------------------------------------------------------------------
   // Factories — create + register in maps
   // ---------------------------------------------------------------------------
 
@@ -188,7 +202,7 @@ export class SOMDocument extends SOMObject {
     if (descriptor.rotation)    node.setRotation(descriptor.rotation)
     if (descriptor.scale)       node.setScale(descriptor.scale)
     if (descriptor.extras)      node.setExtras(descriptor.extras)
-    const somNode = new SOMNode(node)
+    const somNode = new SOMNode(node, this)
     this._nodeMap.set(node, somNode)
     this._nodesByName.set(node.getName(), somNode)
     this._registerNodeDispose(node, somNode)
@@ -197,7 +211,7 @@ export class SOMDocument extends SOMObject {
 
   createMesh(descriptor = {}) {
     const mesh    = this._document.createMesh(descriptor.name ?? '')
-    const somMesh = new SOMMesh(mesh)
+    const somMesh = new SOMMesh(mesh, this)
     somMesh._prims = []
     this._meshMap.set(mesh, somMesh)
     return somMesh
@@ -223,7 +237,7 @@ export class SOMDocument extends SOMObject {
 
   createPrimitive(descriptor = {}) {
     const prim    = this._document.createPrimitive()
-    const somPrim = new SOMPrimitive(prim)
+    const somPrim = new SOMPrimitive(prim, this)
     this._primitiveMap.set(prim, somPrim)
     return somPrim
   }
@@ -247,14 +261,14 @@ export class SOMDocument extends SOMObject {
     if (descriptor.scale)       node.setScale(descriptor.scale)
     if (descriptor.extras)      node.setExtras(descriptor.extras)
 
-    const somNode = new SOMNode(node)
+    const somNode = new SOMNode(node, this)
     this._nodeMap.set(node, somNode)
     this._nodesByName.set(node.getName(), somNode)
     this._registerNodeDispose(node, somNode)
 
     if (descriptor.mesh) {
       const mesh    = this._document.createMesh(descriptor.mesh.name ?? '')
-      const somMesh = new SOMMesh(mesh)
+      const somMesh = new SOMMesh(mesh, this)
       somMesh._prims = []
       this._meshMap.set(mesh, somMesh)
       somNode._mesh = somMesh
@@ -287,7 +301,7 @@ export class SOMDocument extends SOMObject {
           prim.setIndices(acc)
         }
 
-        const somPrim = new SOMPrimitive(prim)
+        const somPrim = new SOMPrimitive(prim, this)
         this._primitiveMap.set(prim, somPrim)
         somMesh._prims.push(somPrim)
 
