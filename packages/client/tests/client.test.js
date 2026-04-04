@@ -591,6 +591,59 @@ test('mutation-sync — avatar node excluded from mutation listeners → no send
   assert.strictEqual(sendMsgs.length, 0, 'no send emitted for avatar node mutation')
 })
 
+// ---------------------------------------------------------------------------
+// Document extras sync (__document__ protocol)
+// ---------------------------------------------------------------------------
+
+test('document-extras — local setExtrasAtrium → outbound send with node __document__', () => {
+  const { client, mock } = makeWiredClient()
+  client.som.setExtrasAtrium('name', 'Live World')
+
+  const sendMsg = mock.sent.find(m => m.type === 'send' && m.node === '__document__')
+  assert.ok(sendMsg,                                  'send message emitted')
+  assert.equal(sendMsg.node,  '__document__',         'node is __document__')
+  assert.equal(sendMsg.field, 'extras',               'field is extras')
+  assert.equal(sendMsg.value?.atrium?.name, 'Live World', 'correct atrium.name in value')
+})
+
+test('document-extras — inbound __document__ set → som.extras updated, no outbound send', async () => {
+  const { client, mock } = makeWiredClient()
+  const sentBefore = mock.sent.length
+
+  mock.simulateMessage({
+    type: 'set', seq: 1,
+    node: '__document__', field: 'extras',
+    value: { atrium: { name: 'Remote World' } },
+    serverTime: Date.now(),
+    session: 'other-session-id',
+  })
+
+  await new Promise(r => setImmediate(r))
+
+  assert.equal(client.som.extras?.atrium?.name, 'Remote World', 'extras updated')
+  const newSends = mock.sent.slice(sentBefore).filter(m => m.type === 'send')
+  assert.equal(newSends.length, 0, 'no loopback send')
+})
+
+test('document-extras — own echo skipped → extras not double-applied', async () => {
+  const { client, mock } = makeWiredClient()
+  client.som.setExtrasAtrium('name', 'Original')
+  mock.sent.length = 0
+
+  mock.simulateMessage({
+    type: 'set', seq: 2,
+    node: '__document__', field: 'extras',
+    value: { atrium: { name: 'Echo Should Be Ignored' } },
+    serverTime: Date.now(),
+    session: client._sessionId,
+  })
+
+  await new Promise(r => setImmediate(r))
+
+  assert.equal(client.som.extras?.atrium?.name, 'Original', 'own echo ignored')
+  assert.equal(mock.sent.filter(m => m.type === 'send').length, 0, 'no extra send')
+})
+
 test('mutation-sync — non-avatar node mutation still produces send when avatar present', () => {
   let mock
   const client = new AtriumClient({

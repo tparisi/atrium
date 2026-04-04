@@ -329,8 +329,12 @@ export class AtriumClient extends EventEmitter {
     // Case 2: remote set — apply to SOM but guard against re-broadcast via mutation listener
     this._applyingRemote = true
     try {
-      const node = this._som.getNodeByName(msg.node)
-      if (node) this._som.setPath(node, msg.field, msg.value)
+      if (msg.node === '__document__' && msg.field === 'extras') {
+        this._som.extras = msg.value
+      } else {
+        const node = this._som.getNodeByName(msg.node)
+        if (node) this._som.setPath(node, msg.field, msg.value)
+      }
     } finally {
       this._applyingRemote = false
     }
@@ -383,9 +387,18 @@ export class AtriumClient extends EventEmitter {
   // Mutation listener attachment
   // ---------------------------------------------------------------------------
 
-  /** Attach mutation listeners to all nodes currently in the SOM. */
+  /** Attach mutation listeners to all nodes currently in the SOM, plus the document root. */
   _attachMutationListeners() {
     if (!this._som) return
+
+    // Document-level extras mutations
+    this._som.addEventListener('mutation', (event) => {
+      if (event.detail.property === 'extras') {
+        this._onLocalMutation('__document__', 'extras', event.detail.value)
+      }
+    })
+
+    // Node-level mutations
     for (const node of this._som.nodes) {
       this._attachNodeListeners(node)
     }

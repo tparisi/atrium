@@ -180,6 +180,56 @@
 
   .tree-children { padding-left: 14px; }
 
+  /* ── World Info panel ──────────────────────────────── */
+  #world-info {
+    flex-shrink: 0;
+    border-bottom: 1px solid #222;
+  }
+
+  .world-info-header {
+    padding: 5px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #64748b;
+    text-transform: uppercase;
+    background: #1a1a1a;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .world-info-header:hover { background: #202020; color: #94a3b8; }
+
+  .world-info-content {
+    padding: 6px 8px 8px;
+    overflow-y: auto;
+    max-height: 300px;
+  }
+
+  .world-info-content input[type="text"] {
+    flex: 1;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 3px;
+    color: #cbd5e1;
+    padding: 2px 4px;
+    font-size: 11px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    min-width: 0;
+  }
+  .world-info-content input[type="text"]:focus { outline: none; border-color: #4f46e5; }
+
+  .world-info-content .prop-value-text {
+    font-size: 11px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    color: #475569;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   /* ── Property sheet ─────────────────────────────────── */
   #props-panel {
     flex: 0 0 auto;
@@ -362,6 +412,7 @@
 <div class="main">
   <!-- Left panel -->
   <div class="left-panel">
+    <div id="world-info"></div>
     <div class="panel-header">Scene Graph</div>
     <div id="tree-panel"></div>
     <div class="panel-header" id="props-header" style="display:none">Properties</div>

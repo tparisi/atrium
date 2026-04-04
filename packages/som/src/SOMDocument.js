@@ -33,6 +33,7 @@ function resolvePath(somNode, segments) {
 }
 
 import { SOMObject }    from './SOMObject.js'
+import { SOMEvent }     from './SOMEvent.js'
 import { SOMScene }     from './SOMScene.js'
 import { SOMNode }      from './SOMNode.js'
 import { SOMMesh }      from './SOMMesh.js'
@@ -148,6 +149,43 @@ export class SOMDocument extends SOMObject {
   // ---------------------------------------------------------------------------
 
   get document() { return this._document }
+
+  // ---------------------------------------------------------------------------
+  // Document root extras
+  // ---------------------------------------------------------------------------
+
+  get extras() {
+    return this._root.getExtras()
+  }
+
+  set extras(value) {
+    this._root.setExtras(value)
+    if (this._hasListeners('mutation')) {
+      this._dispatchEvent(new SOMEvent('mutation', { target: this, property: 'extras', value }))
+    }
+  }
+
+  /**
+   * Mutate a single field inside extras.atrium by dot-delimited path.
+   * e.g. setExtrasAtrium('background.texture', 'sky.png')
+   * Fires a mutation event via the extras setter.
+   */
+  setExtrasAtrium(path, value) {
+    const extras = structuredClone(this.extras || {})
+    const atrium = extras.atrium || (extras.atrium = {})
+
+    const segments = path.split('.')
+    let target = atrium
+    for (let i = 0; i < segments.length - 1; i++) {
+      if (target[segments[i]] === undefined || target[segments[i]] === null) {
+        target[segments[i]] = {}
+      }
+      target = target[segments[i]]
+    }
+    target[segments[segments.length - 1]] = value
+
+    this.extras = { ...extras, atrium }
+  }
 
   // ---------------------------------------------------------------------------
   // Scene graph entry point

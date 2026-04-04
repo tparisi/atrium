@@ -173,7 +173,13 @@ export function createSessionServer({ port = 3000, maxUsers = 100, world = null 
             sendError(ws, msg.seq, 'UNKNOWN_MESSAGE', 'World not loaded')
             break
           }
-          const result = world.setField(msg.node, msg.field, msg.value)
+          let result
+          if (msg.node === '__document__' && msg.field === 'extras') {
+            world.som.extras = msg.value
+            result = { ok: true }
+          } else {
+            result = world.setField(msg.node, msg.field, msg.value)
+          }
           if (!result.ok) {
             sendError(ws, msg.seq, result.code, `${result.code}: ${msg.node}`)
             break
