@@ -162,6 +162,12 @@
   }
   #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
   #crosshair::after  { height: 2px; width: 100%; top: 50%; transform: translateY(-50%); }
+
+  /* ── Drag-and-drop indicator ───────────────────────── */
+  #viewport.drag-over {
+    outline: 3px dashed #4a9eff;
+    outline-offset: -3px;
+  }
 </style>
 
 <!-- Import map: Three.js + glTF-Transform + AtriumClient -->

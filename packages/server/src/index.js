@@ -5,11 +5,12 @@ import { createWorld } from './world.js'
 import { createSessionServer } from './session.js'
 
 const worldPath = process.env.WORLD_PATH ?? './space.gltf'
+const port = parseInt(process.env.PORT ?? '3000', 10)
 
 const world = await createWorld(worldPath)
 const nodeCount = world.listNodeNames().length
 
 console.log(`Atrium world loaded: ${world.meta.name ?? 'unnamed'} (${nodeCount} nodes)`)
 
-createSessionServer({ port: 3000, world })
-console.log('Atrium server listening on ws://localhost:3000')
+createSessionServer({ port, world })
+console.log(`Atrium server listening on ws://localhost:${port}`)

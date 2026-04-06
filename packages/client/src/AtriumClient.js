@@ -212,15 +212,28 @@ export class AtriumClient extends EventEmitter {
 
   /**
    * Load a world from a static URL (no server required).
-   * @param {string} url - HTTP URL to a .gltf or .atrium.json file
+   * @param {string} url - HTTP URL to a .gltf or .glb file
    */
   async loadWorld(url) {
     const io  = makeWebIO()
     const doc = await io.read(url)
-    this._initSom(doc)
-    this._attachMutationListeners()
-    const meta = doc.getRoot().getExtras()?.atrium?.world ?? {}
-    this._emitWorldLoaded(meta)
+    this._finalizeWorldLoad(doc)
+  }
+
+  /**
+   * Load a world from already-read file data (e.g. from drag-and-drop).
+   * @param {string|ArrayBuffer} data - glTF JSON string or GLB ArrayBuffer
+   * @param {string} [name] - Filename, used for logging only
+   */
+  async loadWorldFromData(data, name) {
+    const io = makeWebIO()
+    let doc
+    if (typeof data === 'string') {
+      doc = await io.readJSON({ json: JSON.parse(data), resources: {} })
+    } else {
+      doc = await io.readBinary(new Uint8Array(data))
+    }
+    this._finalizeWorldLoad(doc)
   }
 
   /**
@@ -511,6 +524,13 @@ export class AtriumClient extends EventEmitter {
   // ---------------------------------------------------------------------------
   // Internal utilities
   // ---------------------------------------------------------------------------
+
+  _finalizeWorldLoad(doc) {
+    this._initSom(doc)
+    this._attachMutationListeners()
+    const meta = doc.getRoot().getExtras()?.atrium?.world ?? {}
+    this._emitWorldLoaded(meta)
+  }
 
   _initSom(doc) {
     this._som     = new SOMDocument(doc)

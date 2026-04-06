@@ -250,6 +250,94 @@ client.on('som:set', ({ nodeName }) => {
 })
 
 // ---------------------------------------------------------------------------
+// .atrium.json config loading
+// ---------------------------------------------------------------------------
+
+async function loadAtriumConfig(config, baseUrl) {
+  if (!config?.world) {
+    console.warn('.atrium.json: missing "world" key')
+    return null
+  }
+
+  const gltfUrl = config.world.gltf
+    ? (baseUrl ? new URL(config.world.gltf, baseUrl).href : null)
+    : null
+
+  let userMessage = null
+
+  if (gltfUrl) {
+    await client.loadWorld(gltfUrl)
+    worldUrlInput.value = gltfUrl
+  } else if (config.world.gltf) {
+    console.warn('.atrium.json dropped locally — cannot resolve relative glTF path')
+    userMessage = 'Loaded server URL from config. Drop the .gltf file directly to load the world.'
+  }
+
+  if (config.world.server) {
+    wsUrlInput.value = config.world.server
+  }
+
+  return userMessage
+}
+
+// ---------------------------------------------------------------------------
+// Drag-and-drop file loading
+// ---------------------------------------------------------------------------
+
+async function loadDroppedFile(file) {
+  const name = file.name.toLowerCase()
+
+  if (name.endsWith('.atrium.json') || name.endsWith('.json')) {
+    const text = await file.text()
+    let config
+    try { config = JSON.parse(text) } catch {
+      console.warn(`Invalid JSON in dropped file: ${file.name}`)
+      return
+    }
+    return await loadAtriumConfig(config, null)
+  }
+
+  if (name.endsWith('.glb')) {
+    const buffer = await file.arrayBuffer()
+    await client.loadWorldFromData(buffer, file.name)
+    return
+  }
+
+  if (name.endsWith('.gltf')) {
+    const text = await file.text()
+    await client.loadWorldFromData(text, file.name)
+    return
+  }
+
+  console.warn(`Unsupported file type: ${file.name}`)
+}
+
+viewportEl.addEventListener('dragover', (e) => {
+  e.preventDefault()
+  e.dataTransfer.dropEffect = 'copy'
+  viewportEl.classList.add('drag-over')
+})
+
+viewportEl.addEventListener('dragleave', () => {
+  viewportEl.classList.remove('drag-over')
+})
+
+viewportEl.addEventListener('drop', async (e) => {
+  e.preventDefault()
+  viewportEl.classList.remove('drag-over')
+  const file = e.dataTransfer.files[0]
+  if (!file) return
+  updateStatusBar('Loading…')
+  try {
+    const msg = await loadDroppedFile(file)
+    if (msg) updateStatusBar(msg)
+  } catch (err) {
+    updateStatusBar('Load failed: ' + err.message)
+    console.error(err)
+  }
+})
+
+// ---------------------------------------------------------------------------
 // Toolbar — Load
 // ---------------------------------------------------------------------------
 
@@ -259,7 +347,15 @@ loadBtn.addEventListener('click', async () => {
   loadBtn.disabled = true
   updateStatusBar('Loading…')
   try {
-    await client.loadWorld(url)
+    if (url.endsWith('.json')) {
+      const configUrl = new URL(url, window.location.href).href
+      const resp = await fetch(configUrl)
+      const config = await resp.json()
+      const msg = await loadAtriumConfig(config, configUrl)
+      if (msg) updateStatusBar(msg)
+    } else {
+      await client.loadWorld(url)
+    }
   } catch (err) {
     updateStatusBar('Load failed: ' + err.message)
     console.error(err)
