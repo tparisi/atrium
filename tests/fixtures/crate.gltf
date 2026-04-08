@@ -1,0 +1,109 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.3.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 24,
+      "max": [
+        0.25,
+        0.25,
+        0.25
+      ],
+      "min": [
+        -0.25,
+        -0.25,
+        -0.25
+      ],
+      "bufferView": 0,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 24,
+      "bufferView": 0,
+      "byteOffset": 12
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 36,
+      "bufferView": 1,
+      "byteOffset": 0
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 576,
+      "byteStride": 24,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 576,
+      "byteLength": 72,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "data:application/octet-stream;base64,AACAvgAAgL4AAIA+AAAAAAAAAAAAAIA/AACAPgAAgL4AAIA+AAAAAAAAAAAAAIA/AACAPgAAgD4AAIA+AAAAAAAAAAAAAIA/AACAvgAAgD4AAIA+AAAAAAAAAAAAAIA/AACAPgAAgL4AAIC+AAAAAAAAAAAAAIC/AACAvgAAgL4AAIC+AAAAAAAAAAAAAIC/AACAvgAAgD4AAIC+AAAAAAAAAAAAAIC/AACAPgAAgD4AAIC+AAAAAAAAAAAAAIC/AACAPgAAgL4AAIA+AACAPwAAAAAAAAAAAACAPgAAgL4AAIC+AACAPwAAAAAAAAAAAACAPgAAgD4AAIC+AACAPwAAAAAAAAAAAACAPgAAgD4AAIA+AACAPwAAAAAAAAAAAACAvgAAgL4AAIC+AACAvwAAAAAAAAAAAACAvgAAgL4AAIA+AACAvwAAAAAAAAAAAACAvgAAgD4AAIA+AACAvwAAAAAAAAAAAACAvgAAgD4AAIC+AACAvwAAAAAAAAAAAACAvgAAgD4AAIA+AAAAAAAAgD8AAAAAAACAPgAAgD4AAIA+AAAAAAAAgD8AAAAAAACAPgAAgD4AAIC+AAAAAAAAgD8AAAAAAACAvgAAgD4AAIC+AAAAAAAAgD8AAAAAAACAvgAAgL4AAIC+AAAAAAAAgL8AAAAAAACAPgAAgL4AAIC+AAAAAAAAgL8AAAAAAACAPgAAgL4AAIA+AAAAAAAAgL8AAAAAAACAvgAAgL4AAIA+AAAAAAAAgL8AAAAAAAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMAFAAVABYAFAAWABcA",
+      "byteLength": 648
+    }
+  ],
+  "materials": [
+    {
+      "name": "mat-crate",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.2,
+          0.8,
+          0.2,
+          1
+        ],
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "mesh-crate",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 2
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Crate",
+      "translation": [
+        0,
+        0.25,
+        0
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ]
+}

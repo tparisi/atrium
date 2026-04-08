@@ -66,10 +66,11 @@ export class AtriumClient extends EventEmitter {
    * @param {boolean}  [opts.debug=false]  - Gate verbose console logging
    * @param {Function} [opts.WebSocket]    - WebSocket constructor (injectable for testing)
    */
-  constructor({ debug = false, WebSocket: WSImpl = globalThis.WebSocket } = {}) {
+  constructor({ debug = false, WebSocket: WSImpl = globalThis.WebSocket, fetch: fetchImpl = globalThis.fetch } = {}) {
     super()
-    this._debug  = debug
-    this._WSImpl = WSImpl
+    this._debug   = debug
+    this._WSImpl  = WSImpl
+    this._fetch   = fetchImpl
 
     // Connection state
     this._ws        = null
@@ -82,8 +83,9 @@ export class AtriumClient extends EventEmitter {
     this._avatarDescriptor = null   // opaque; set by apps/client via connect()
 
     // World / SOM
-    this._som     = null
-    this._navInfo = null
+    this._som          = null
+    this._navInfo      = null
+    this._worldBaseUrl = null
 
     // Peer session tracking: sessionId → displayName
     this._peerSessions = new Map()
@@ -215,6 +217,8 @@ export class AtriumClient extends EventEmitter {
    * @param {string} url - HTTP URL to a .gltf or .glb file
    */
   async loadWorld(url) {
+//    this._worldBaseUrl = url
+    this._worldBaseUrl = new URL(url, window.location.href).href;
     const io  = makeWebIO()
     const doc = await io.read(url)
     this._finalizeWorldLoad(doc)
@@ -226,6 +230,7 @@ export class AtriumClient extends EventEmitter {
    * @param {string} [name] - Filename, used for logging only
    */
   async loadWorldFromData(data, name) {
+    this._worldBaseUrl = null   // no URL to resolve relative refs against
     const io = makeWebIO()
     let doc
     if (typeof data === 'string') {
@@ -287,6 +292,8 @@ export class AtriumClient extends EventEmitter {
 
     const meta = doc.getRoot().getExtras()?.atrium?.world ?? {}
     this._emitWorldLoaded(meta)
+    // Re-resolve external references using the world URL from the original loadWorld call
+    this.resolveExternalReferences()
   }
 
   _onAdd(msg) {
@@ -530,6 +537,78 @@ export class AtriumClient extends EventEmitter {
     this._attachMutationListeners()
     const meta = doc.getRoot().getExtras()?.atrium?.world ?? {}
     this._emitWorldLoaded(meta)
+    // Resolve external references asynchronously — base world is usable immediately
+    this.resolveExternalReferences()
+  }
+
+  /**
+   * Walk all SOM nodes looking for `extras.atrium.source`. For each found,
+   * fetch the external glTF, ingest it into the SOM under that container node,
+   * and emit `world:loaded` with `source` + `containerName` fields.
+   * Errors on individual references are caught and logged — not fatal.
+   * No-ops if `_worldBaseUrl` is null (dropped files with no resolvable base).
+   */
+  async resolveExternalReferences() {
+    if (!this._som || !this._worldBaseUrl) return
+
+    const io    = makeWebIO()
+    const tasks = []
+
+    for (const node of this._som.nodes) {
+      const source = node.extras?.atrium?.source
+      if (!source) continue
+      const containerName = node.name
+      const resolvedUrl   = new URL(source, this._worldBaseUrl).href
+      tasks.push(this._loadExternalRef(containerName, resolvedUrl, io))
+    }
+
+    await Promise.all(tasks)
+  }
+
+  async _loadExternalRef(containerName, url, io) {
+    try {
+//      const resp = await this._fetch(url)
+      const resp = await this._fetch.call(globalThis, url);
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching "${url}"`)
+
+      let doc
+      if (url.endsWith('.glb')) {
+        const buffer = await resp.arrayBuffer()
+        doc = await io.readBinary(new Uint8Array(buffer))
+      } else {
+        const text = await resp.text()
+        doc = await io.readJSON({ json: JSON.parse(text), resources: {} })
+      }
+
+//      const newNodes = this._som.ingestExternalScene(containerName, doc)
+
+      var newNodes = null;
+      this._applyingRemote = true;
+      try {
+          newNodes = this.som.ingestExternalScene(containerName, doc);
+      } finally {
+          this._applyingRemote = false;
+      }
+
+      // Attach mutation listeners to all newly ingested nodes
+      for (const somNode of newNodes) {
+        this._attachNodeListenersRecursive(somNode)
+      }
+
+      // Emit world:loaded for this reference — same event, extra fields present
+      const meta = this._som.document.getRoot().getExtras()?.atrium?.world ?? {}
+      this._emitWorldLoaded({ ...meta, source: url, containerName })
+    } catch (err) {
+      console.warn(`[AtriumClient] Failed to resolve external reference "${url}" for container "${containerName}":`, err.message)
+    }
+  }
+
+  _attachNodeListenersRecursive(somNode) {
+    this._attachNodeListeners(somNode)
+    for (const child of somNode.children) {
+      this._attachNodeListenersRecursive(child)
+    }
   }
 
   _initSom(doc) {
@@ -538,12 +617,19 @@ export class AtriumClient extends EventEmitter {
   }
 
   _emitWorldLoaded(meta) {
-    const name   = meta.name        ?? undefined
-    const desc   = meta.description ?? undefined
-    const author = meta.author      ?? undefined
-    console.log(`[AtriumClient] World loaded: ${name ?? '(unnamed)'}${author ? ` by ${author}` : ''}`)
-    if (desc) console.log(`  ${desc}`)
-    this.emit('world:loaded', { name, description: desc, author })
+    const name          = meta.name          ?? undefined
+    const desc          = meta.description   ?? undefined
+    const author        = meta.author        ?? undefined
+    const source        = meta.source        ?? undefined
+    const containerName = meta.containerName ?? undefined
+    if (!source) {
+      // Base world load — always log
+      console.log(`[AtriumClient] World loaded: ${name ?? '(unnamed)'}${author ? ` by ${author}` : ''}`)
+      if (desc) console.log(`  ${desc}`)
+    } else {
+      this._log(`External ref loaded: "${containerName}" ← ${source}`)
+    }
+    this.emit('world:loaded', { name, description: desc, author, source, containerName })
   }
 
   _wsSend(msg) {

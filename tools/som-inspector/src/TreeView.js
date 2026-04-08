@@ -96,7 +96,12 @@ export class TreeView {
 
     const label = document.createElement('span')
     label.className = 'tree-label'
-    label.textContent = somNode.name || '(unnamed)'
+    // For prefixed names (e.g. "Crate/Crate"), display only the last segment.
+    // The hierarchy already provides the container context.
+    const displayName = somNode.name.includes('/')
+      ? somNode.name.slice(somNode.name.lastIndexOf('/') + 1)
+      : somNode.name
+    label.textContent = displayName || '(unnamed)'
     row.appendChild(label)
 
     // Ephemeral indicator — node stamped by AtriumClient on connect()

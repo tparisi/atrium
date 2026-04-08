@@ -364,6 +364,143 @@ export class SOMDocument extends SOMObject {
   }
 
   // ---------------------------------------------------------------------------
+  // ingestExternalScene — copy a parsed external Document under a container node
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Walk the default scene of `externalDocument`, copy all its nodes (with
+   * prefixed names), meshes, materials, and geometry into this document, and
+   * attach them as children of the container node named `containerName`.
+   *
+   * Naming: every ingested node's SOM name becomes `containerName/originalName`.
+   * Nested children follow naturally: `containerName/Parent/Child`.
+   *
+   * The external document's root `extras` (including `extras.atrium`) are NOT
+   * copied — only the scene graph and geometry are consumed.
+   *
+   * @param {string}   containerName    - Name of the existing SOM container node
+   * @param {Document} externalDocument - Parsed glTF-Transform Document
+   * @returns {SOMNode[]} Newly created top-level SOMNode instances
+   */
+  ingestExternalScene(containerName, externalDocument) {
+    const containerSomNode = this.getNodeByName(containerName)
+    if (!containerSomNode) throw new Error(`Container node "${containerName}" not found in SOM`)
+
+    const extRoot  = externalDocument.getRoot()
+    const extScene = extRoot.listScenes()[0]
+    if (!extScene) return []
+
+    // Shared buffer for all copied geometry
+    const buf = this._document.createBuffer()
+
+    // Copy-through caches: ext glTF-Transform object → world glTF-Transform object
+    const matCopyMap  = new Map()
+    const meshCopyMap = new Map()
+
+    const copyAccessor = (extAcc) => {
+      const arr = extAcc.getArray()
+      return this._document.createAccessor()
+        .setType(extAcc.getType())
+        .setArray(arr.slice())
+        .setBuffer(buf)
+    }
+
+    const copyMaterial = (extMat) => {
+      if (matCopyMap.has(extMat)) return matCopyMap.get(extMat)
+      const mat = this._document.createMaterial(extMat.getName())
+        .setBaseColorFactor(extMat.getBaseColorFactor())
+        .setMetallicFactor(extMat.getMetallicFactor())
+        .setRoughnessFactor(extMat.getRoughnessFactor())
+        .setEmissiveFactor(extMat.getEmissiveFactor())
+        .setAlphaMode(extMat.getAlphaMode())
+      const somMat = new SOMMaterial(mat)
+      this._materialMap.set(mat, somMat)
+      matCopyMap.set(extMat, mat)
+      return mat
+    }
+
+    const copyMesh = (extMesh) => {
+      if (meshCopyMap.has(extMesh)) return meshCopyMap.get(extMesh)
+      const mesh    = this._document.createMesh(extMesh.getName())
+      const somMesh = new SOMMesh(mesh, this)
+      somMesh._prims = []
+      this._meshMap.set(mesh, somMesh)
+      meshCopyMap.set(extMesh, mesh)
+
+      for (const extPrim of extMesh.listPrimitives()) {
+        const prim = this._document.createPrimitive()
+
+        for (const semantic of extPrim.listSemantics()) {
+          prim.setAttribute(semantic, copyAccessor(extPrim.getAttribute(semantic)))
+        }
+
+        const extIdx = extPrim.getIndices()
+        if (extIdx) prim.setIndices(copyAccessor(extIdx))
+
+        const extMat = extPrim.getMaterial()
+        if (extMat) prim.setMaterial(copyMaterial(extMat))
+
+        const somPrim = new SOMPrimitive(prim, this)
+        const copiedMat = prim.getMaterial()
+        if (copiedMat) somPrim._material = this._materialMap.get(copiedMat) ?? null
+        this._primitiveMap.set(prim, somPrim)
+        somMesh._prims.push(somPrim)
+        mesh.addPrimitive(prim)
+      }
+
+      return mesh
+    }
+
+    // Recursively copy a node from the external document.
+    // namePrefix is e.g. "Crate/" for root nodes, "Crate/Parent/" for children.
+    const copyNode = (extNode, namePrefix) => {
+      const prefixedName = namePrefix + extNode.getName()
+      const node = this._document.createNode(prefixedName)
+      node.setTranslation(extNode.getTranslation())
+      node.setRotation(extNode.getRotation())
+      node.setScale(extNode.getScale())
+      const extras = extNode.getExtras()
+      if (extras && Object.keys(extras).length > 0) node.setExtras(extras)
+
+      const somNode = new SOMNode(node, this)
+      this._nodeMap.set(node, somNode)
+      this._nodesByName.set(prefixedName, somNode)
+      this._registerNodeDispose(node, somNode)
+
+      const extMesh = extNode.getMesh()
+      if (extMesh) {
+        const mesh = copyMesh(extMesh)
+        node.setMesh(mesh)
+        somNode._mesh = this._meshMap.get(mesh) ?? null
+      }
+
+      for (const extChild of extNode.listChildren()) {
+        const childSomNode = copyNode(extChild, prefixedName + '/')
+        node.addChild(childSomNode._node)
+      }
+
+      return somNode
+    }
+
+    const newTopLevelNodes = []
+    for (const extNode of extScene.listChildren()) {
+      const somNode = copyNode(extNode, containerName + '/')
+      containerSomNode._node.addChild(somNode._node)
+      newTopLevelNodes.push(somNode)
+    }
+
+    // Fire childList mutation event on the container node
+    if (containerSomNode._hasListeners('mutation')) {
+      containerSomNode._dispatchEvent(new SOMEvent('mutation', {
+        target:    containerSomNode,
+        childList: { addedNodes: newTopLevelNodes.map(n => n.name) },
+      }))
+    }
+
+    return newTopLevelNodes
+  }
+
+  // ---------------------------------------------------------------------------
   // Path resolution
   // ---------------------------------------------------------------------------
 

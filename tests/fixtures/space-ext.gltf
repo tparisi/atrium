@@ -1,0 +1,169 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.3.0",
+    "version": "2.0"
+  },
+  "extras": {
+    "atrium": {
+      "version": "0.1.0",
+      "world": {
+        "name": "Test World (Ext)",
+        "maxUsers": 10,
+        "navigation": {
+          "mode": [
+            "WALK",
+            "FLY",
+            "ORBIT",
+            "TELEPORT"
+          ],
+          "terrainFollowing": true,
+          "speed": {
+            "default": 1.4,
+            "min": 0.5,
+            "max": 5
+          },
+          "collision": {
+            "enabled": false
+          },
+          "updateRate": {
+            "positionInterval": 1000,
+            "maxViewRate": 20
+          }
+        },
+        "capabilities": {
+          "tick": {
+            "interval": 1000
+          },
+          "physics": false,
+          "chat": false
+        }
+      }
+    }
+  },
+  "accessors": [
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 24,
+      "max": [
+        5,
+        0.02500000037252903,
+        5
+      ],
+      "min": [
+        -5,
+        -0.02500000037252903,
+        -5
+      ],
+      "bufferView": 0,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 24,
+      "bufferView": 0,
+      "byteOffset": 12
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 36,
+      "bufferView": 1,
+      "byteOffset": 0
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 576,
+      "byteStride": 24,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 576,
+      "byteLength": 72,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "data:application/octet-stream;base64,AACgwM3MzLwAAKBAAAAAAAAAAAAAAIA/AACgQM3MzLwAAKBAAAAAAAAAAAAAAIA/AACgQM3MzDwAAKBAAAAAAAAAAAAAAIA/AACgwM3MzDwAAKBAAAAAAAAAAAAAAIA/AACgQM3MzLwAAKDAAAAAAAAAAAAAAIC/AACgwM3MzLwAAKDAAAAAAAAAAAAAAIC/AACgwM3MzDwAAKDAAAAAAAAAAAAAAIC/AACgQM3MzDwAAKDAAAAAAAAAAAAAAIC/AACgQM3MzLwAAKBAAACAPwAAAAAAAAAAAACgQM3MzLwAAKDAAACAPwAAAAAAAAAAAACgQM3MzDwAAKDAAACAPwAAAAAAAAAAAACgQM3MzDwAAKBAAACAPwAAAAAAAAAAAACgwM3MzLwAAKDAAACAvwAAAAAAAAAAAACgwM3MzLwAAKBAAACAvwAAAAAAAAAAAACgwM3MzDwAAKBAAACAvwAAAAAAAAAAAACgwM3MzDwAAKDAAACAvwAAAAAAAAAAAACgwM3MzDwAAKBAAAAAAAAAgD8AAAAAAACgQM3MzDwAAKBAAAAAAAAAgD8AAAAAAACgQM3MzDwAAKDAAAAAAAAAgD8AAAAAAACgwM3MzDwAAKDAAAAAAAAAgD8AAAAAAACgwM3MzLwAAKDAAAAAAAAAgL8AAAAAAACgQM3MzLwAAKDAAAAAAAAAgL8AAAAAAACgQM3MzLwAAKBAAAAAAAAAgL8AAAAAAACgwM3MzLwAAKBAAAAAAAAAgL8AAAAAAAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMAFAAVABYAFAAWABcA",
+      "byteLength": 648
+    }
+  ],
+  "materials": [
+    {
+      "name": "mat-ground",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.5,
+          0.5,
+          0.5,
+          1
+        ],
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "mesh-ground",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 2
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Floor",
+      "mesh": 0
+    },
+    {
+      "name": "Crate",
+      "extras": {
+        "atrium": {
+          "source": "./crate.gltf"
+        }
+      },
+      "translation": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "Light",
+      "extras": {
+        "atrium": {
+          "source": "./lamp.gltf"
+        }
+      },
+      "translation": [
+        3,
+        0,
+        0
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0,
+        1,
+        2
+      ]
+    }
+  ]
+}

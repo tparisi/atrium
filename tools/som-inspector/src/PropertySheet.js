@@ -73,6 +73,7 @@ export class PropertySheet {
   _build(node) {
     const nameEl = document.createElement('div')
     nameEl.className = 'prop-node-name'
+    // Always show the full prefixed path (e.g. "Light/Lamp") for unambiguous identification
     nameEl.textContent = node.name || '(unnamed)'
     this._container.appendChild(nameEl)
 
