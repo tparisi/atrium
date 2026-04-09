@@ -79,6 +79,9 @@ export class PropertySheet {
 
     this._buildNodeSection(node)
 
+    const source = node.extras?.atrium?.source
+    if (source) this._buildExternalRefSection(source)
+
     const mat = node.mesh?.primitives?.[0]?.material ?? null
     if (mat) this._buildMaterialSection(mat)
 
@@ -133,6 +136,25 @@ export class PropertySheet {
       this._updaters.push(() => { cb.checked = node.visible ?? true })
       inp.appendChild(cb)
     }
+
+    this._container.appendChild(sec)
+  }
+
+  // ---------------------------------------------------------------------------
+  // External Reference section
+  // ---------------------------------------------------------------------------
+
+  _buildExternalRefSection(source) {
+    const sec = this._section('External Reference')
+
+    const row   = this._addRow(sec, 'Source')
+    const input = document.createElement('input')
+    input.type      = 'text'
+    input.value     = source
+    input.readOnly  = true
+    input.style.flex = '1'
+    input.style.minWidth = '0'
+    row.appendChild(input)
 
     this._container.appendChild(sec)
   }

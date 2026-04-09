@@ -8,8 +8,10 @@ const worldPath = process.env.WORLD_PATH ?? './space.gltf'
 const port = parseInt(process.env.PORT ?? '3000', 10)
 
 const world = await createWorld(worldPath)
-const nodeCount = world.listNodeNames().length
 
+await world.resolveExternalReferences()
+
+const nodeCount = world.listNodeNames().length
 console.log(`Atrium world loaded: ${world.meta.name ?? 'unnamed'} (${nodeCount} nodes)`)
 
 createSessionServer({ port, world })
