@@ -214,7 +214,7 @@ client.on('disconnected', () => {
 
   // Reload world in static mode — restores nav node and clears avatar geometry
   const url = worldUrlInput.value.trim()
-  if (url) client.loadWorld(url)
+  if (url) client.loadWorld(new URL(url, window.location.href).href)
 })
 
 client.on('error', (err) => {
@@ -354,7 +354,8 @@ loadBtn.addEventListener('click', async () => {
       const msg = await loadAtriumConfig(config, configUrl)
       if (msg) updateStatusBar(msg)
     } else {
-      await client.loadWorld(url)
+      const absoluteUrl = new URL(url, window.location.href).href
+      await client.loadWorld(absoluteUrl)
     }
   } catch (err) {
     updateStatusBar('Load failed: ' + err.message)
@@ -376,6 +377,10 @@ connectBtn.addEventListener('click', () => {
   const wsUrl = wsUrlInput.value.trim()
   if (!wsUrl) return
   setConnectionState('connecting')
+  const worldUrl = worldUrlInput.value.trim()
+  if (worldUrl) {
+    client.worldBaseUrl = new URL(worldUrl, window.location.href).href
+  }
   // Minimal avatar: no mesh — invisible, but present for networking + navigation
   client.connect(wsUrl, { avatar: { translation: [0, 1.6, 0] } })
 })

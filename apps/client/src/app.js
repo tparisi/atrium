@@ -446,7 +446,8 @@ loadBtn.addEventListener('click', async () => {
       const msg = await loadAtriumConfig(config, configUrl)
       overlayEl.textContent = msg ?? ''
     } else {
-      await client.loadWorld(url)
+      const absoluteUrl = new URL(url, window.location.href).href
+      await client.loadWorld(absoluteUrl)
       overlayEl.textContent = ''
     }
   } catch (err) {
@@ -465,6 +466,10 @@ connectBtn.addEventListener('click', () => {
   const wsUrl = wsUrlInput.value.trim()
   if (!wsUrl) return
   setConnectionState('connecting')
+  const worldUrl = worldUrlInput.value.trim()
+  if (worldUrl) {
+    client.worldBaseUrl = new URL(worldUrl, window.location.href).href
+  }
   const avatarDesc = buildAvatarDescriptor()
   client.connect(wsUrl, { avatar: avatarDesc })
 })

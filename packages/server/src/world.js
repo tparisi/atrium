@@ -32,14 +32,16 @@ async function fetchBinary(url) {
   return resp.arrayBuffer()
 }
 
-export async function createWorld(gltfPath) {
+export async function createWorld(gltfPath, { baseUrl } = {}) {
   const io = new NodeIO()
   const document = await io.read(gltfPath)
   const som = new SOMDocument(document)
 
-  // Derive base URL for resolving relative extras.atrium.source paths
+  // Derive base URL for resolving relative extras.atrium.source paths.
+  // If an explicit baseUrl is provided (e.g. from .atrium.json world.baseUrl),
+  // use it; otherwise fall back to a file:// URL from the resolved filesystem path.
   const absPath    = resolvePath(gltfPath)
-  const worldBaseUrl = pathToFileURL(absPath).href
+  const worldBaseUrl = baseUrl ?? pathToFileURL(absPath).href
 
   const rootExtras = document.getRoot().getExtras()
   const meta = rootExtras?.atrium?.world ?? {}

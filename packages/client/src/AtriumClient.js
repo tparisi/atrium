@@ -117,6 +117,14 @@ export class AtriumClient extends EventEmitter {
   get displayName() { return this._displayName }
 
   /**
+   * HTTP base URL used to resolve relative `extras.atrium.source` paths.
+   * Set automatically by loadWorld(). Can be set manually by the app layer
+   * for connect-only flows where loadWorld() is not called.
+   */
+  get worldBaseUrl() { return this._worldBaseUrl }
+  set worldBaseUrl(url) { this._worldBaseUrl = url }
+
+  /**
    * Connect to a running Atrium server.
    * @param {string} wsUrl  - WebSocket URL, e.g. ws://localhost:3000
    * @param {object} opts
@@ -217,8 +225,8 @@ export class AtriumClient extends EventEmitter {
    * @param {string} url - HTTP URL to a .gltf or .glb file
    */
   async loadWorld(url) {
-//    this._worldBaseUrl = url
-    this._worldBaseUrl = new URL(url, window.location.href).href;
+    const lastSlash = url.lastIndexOf('/')
+    this._worldBaseUrl = lastSlash >= 0 ? url.substring(0, lastSlash + 1) : ''
     const io  = makeWebIO()
     const doc = await io.read(url)
     this._finalizeWorldLoad(doc)

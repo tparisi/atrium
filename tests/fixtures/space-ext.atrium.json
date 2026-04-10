@@ -2,6 +2,7 @@
   "version": "0.1.0",
   "world": {
     "gltf": "./space-ext.gltf",
-    "server": "ws://localhost:3000"
+    "server": "ws://localhost:3000",
+    "baseUrl": "http://localhost:8080/tests/fixtures/"
   }
 }
