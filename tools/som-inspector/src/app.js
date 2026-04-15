@@ -3,29 +3,32 @@
 
 import * as THREE from 'three'
 import { DocumentView } from '@gltf-transform/view'
-import { AtriumClient }         from '@atrium/client'
-import { AvatarController }     from '@atrium/client/AvatarController'
-import { NavigationController } from '@atrium/client/NavigationController'
-import { TreeView }             from './TreeView.js'
-import { PropertySheet }        from './PropertySheet.js'
-import { WorldInfoPanel }       from './WorldInfoPanel.js'
+import { AtriumClient }          from '@atrium/client'
+import { AvatarController }      from '@atrium/client/AvatarController'
+import { NavigationController }  from '@atrium/client/NavigationController'
+import { AnimationController }   from '@atrium/client/AnimationController'
+import { TreeView }              from './TreeView.js'
+import { PropertySheet }         from './PropertySheet.js'
+import { WorldInfoPanel }        from './WorldInfoPanel.js'
+import { AnimationsPanel }       from './AnimationsPanel.js'
 
 // ---------------------------------------------------------------------------
 // DOM refs
 // ---------------------------------------------------------------------------
 
-const worldUrlInput  = document.getElementById('worldUrl')
-const wsUrlInput     = document.getElementById('wsUrl')
-const loadBtn        = document.getElementById('loadBtn')
-const connectBtn     = document.getElementById('connectBtn')
-const statusDot      = document.getElementById('statusDot')
-const modeSwitcher   = document.getElementById('mode-switcher')
-const viewportEl     = document.getElementById('viewport')
-const statusBar      = document.getElementById('status-bar')
-const treePanelEl    = document.getElementById('tree-panel')
-const propsPanelEl   = document.getElementById('props-panel')
-const propsHeaderEl  = document.getElementById('props-header')
-const worldInfoEl    = document.getElementById('world-info')
+const worldUrlInput    = document.getElementById('worldUrl')
+const wsUrlInput       = document.getElementById('wsUrl')
+const loadBtn          = document.getElementById('loadBtn')
+const connectBtn       = document.getElementById('connectBtn')
+const statusDot        = document.getElementById('statusDot')
+const modeSwitcher     = document.getElementById('mode-switcher')
+const viewportEl       = document.getElementById('viewport')
+const statusBar        = document.getElementById('status-bar')
+const treePanelEl      = document.getElementById('tree-panel')
+const propsPanelEl     = document.getElementById('props-panel')
+const propsHeaderEl    = document.getElementById('props-header')
+const worldInfoEl      = document.getElementById('world-info')
+const animationsPanelEl = document.getElementById('animations-panel')
 
 // ---------------------------------------------------------------------------
 // Three.js renderer / scene
@@ -68,6 +71,8 @@ const CAMERA_OFFSET_Z = 4.0
 
 let docView    = null
 let sceneGroup = null
+let mixer      = null   // THREE.AnimationMixer — recreated on world:loaded
+const clipMap  = new Map()  // animName → THREE.AnimationClip
 
 function initDocumentView(somDocument) {
   if (docView) { docView.dispose(); threeScene.remove(sceneGroup) }
@@ -75,6 +80,56 @@ function initDocumentView(somDocument) {
   const sceneDef = somDocument.document.getRoot().listScenes()[0]
   sceneGroup = docView.view(sceneDef)
   threeScene.add(sceneGroup)
+}
+
+// ---------------------------------------------------------------------------
+// Animation helpers
+// ---------------------------------------------------------------------------
+
+function buildClipsFromSOM(somDocument) {
+  const clips = []
+  for (const gltfAnim of somDocument.document.getRoot().listAnimations()) {
+    const tracks = []
+    for (const channel of gltfAnim.listChannels()) {
+      const sampler    = channel.getSampler()
+      const targetNode = channel.getTargetNode()
+      const targetPath = channel.getTargetPath()
+      if (!sampler || !targetNode) continue
+      const times  = sampler.getInput()?.getArray()
+      const values = sampler.getOutput()?.getArray()
+      if (!times || !values) continue
+      const nodeName = targetNode.getName()
+      let track
+      if (targetPath === 'rotation') {
+        track = new THREE.QuaternionKeyframeTrack(`${nodeName}.quaternion`, times, values)
+      } else if (targetPath === 'translation') {
+        track = new THREE.VectorKeyframeTrack(`${nodeName}.position`, times, values)
+      } else if (targetPath === 'scale') {
+        track = new THREE.VectorKeyframeTrack(`${nodeName}.scale`, times, values)
+      }
+      if (track) tracks.push(track)
+    }
+    if (tracks.length > 0) {
+      clips.push(new THREE.AnimationClip(gltfAnim.getName(), -1, tracks))
+    }
+  }
+  return clips
+}
+
+function initAnimations() {
+  if (mixer) mixer.stopAllAction()
+  mixer = null
+  clipMap.clear()
+
+  if (!client.som) return
+
+  const clips = buildClipsFromSOM(client.som)
+  for (const clip of clips) clipMap.set(clip.name, clip)
+
+  if (clips.length > 0) {
+    mixer = new THREE.AnimationMixer(sceneGroup)
+    console.log(`[inspector] AnimationMixer ready — ${clips.length} clip(s): ${clips.map(c => c.name).join(', ')}`)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +161,36 @@ const avatar = new AvatarController(client, {
 const nav = new NavigationController(avatar, {
   mode:             'ORBIT',
   mouseSensitivity: 0.005,
+})
+
+const animCtrl = new AnimationController(client)
+
+animCtrl.on('animation:play', ({ animation }) => {
+  if (!mixer) return
+  const clip = clipMap.get(animation.name)
+  if (!clip) { console.warn(`[inspector] animation:play — no clip for "${animation.name}"`); return }
+  const action = mixer.clipAction(clip)
+  action.loop              = animation.loop ? THREE.LoopRepeat : THREE.LoopOnce
+  action.clampWhenFinished = !animation.loop
+  action.timeScale         = animation.timeScale
+  action.reset().play()
+  action.time              = animation.currentTime
+})
+
+animCtrl.on('animation:pause', ({ animation }) => {
+  if (!mixer) return
+  const clip = clipMap.get(animation.name)
+  if (!clip) return
+  const action = mixer.existingAction(clip)
+  if (action) action.paused = true
+})
+
+animCtrl.on('animation:stop', ({ animation }) => {
+  if (!mixer) return
+  const clip = clipMap.get(animation.name)
+  if (!clip) return
+  const action = mixer.existingAction(clip)
+  if (action) action.stop()
 })
 
 // ---------------------------------------------------------------------------
@@ -148,6 +233,7 @@ const propSheet = new PropertySheet(propsPanelEl, propsHeaderEl)
 const worldInfo = new WorldInfoPanel(worldInfoEl, {
   onBackgroundChange: (bg) => loadBackground(bg, worldBaseUrl),
 })
+const animationsPanel = new AnimationsPanel(animationsPanelEl)
 
 treeView.onSelect = (somNode) => {
   propSheet.show(somNode)
@@ -192,9 +278,11 @@ client.on('world:loaded', ({ name }) => {
   threeScene.environment = null
 
   initDocumentView(client.som)
+  initAnimations()
   treeView.build(client.som)
   propSheet.clear()
   worldInfo.show(client.som)
+  animationsPanel.show(client.som, animCtrl)
   updateStatusBar(name ? `World: ${name}` : '')
 
   // Load background via shared helper
@@ -210,6 +298,7 @@ client.on('disconnected', () => {
   setConnectionState('disconnected')
   propSheet.clear()
   worldInfo.clear()
+  animationsPanel.clear()
   updateStatusBar('')
 
   // Reload world in static mode — restores nav node and clears avatar geometry
@@ -429,6 +518,8 @@ function tick(now) {
   lastTick = now
 
   nav.tick(dt)
+  animCtrl.tick(dt)
+  if (mixer) mixer.update(dt)
 
   // Camera sync
   const localNode  = avatar.localNode

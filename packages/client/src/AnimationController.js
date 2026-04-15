@@ -64,6 +64,13 @@ export class AnimationController extends EventEmitter {
   // ---------------------------------------------------------------------------
 
   _onWorldLoaded() {
+    // Tear down previous world's tracking before re-scanning
+    for (const { anim, mutationListener } of this._tracked.values()) {
+      anim.removeEventListener('mutation', mutationListener)
+    }
+    this._tracked.clear()
+    this._playing.clear()
+
     const som = this._client.som
     if (!som) return
 

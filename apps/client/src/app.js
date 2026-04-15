@@ -3,10 +3,11 @@
 
 import * as THREE from 'three'
 import { DocumentView } from '@gltf-transform/view'
-import { AtriumClient }        from '@atrium/client'
-import { AvatarController }    from '@atrium/client/AvatarController'
-import { NavigationController } from '@atrium/client/NavigationController'
-import { LabelOverlay }        from './LabelOverlay.js'
+import { AtriumClient }          from '@atrium/client'
+import { AvatarController }      from '@atrium/client/AvatarController'
+import { NavigationController }  from '@atrium/client/NavigationController'
+import { AnimationController }   from '@atrium/client/AnimationController'
+import { LabelOverlay }          from './LabelOverlay.js'
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -94,6 +95,8 @@ onResize()
 
 let docView    = null
 let sceneGroup = null
+let mixer      = null   // THREE.AnimationMixer — recreated on world:loaded
+const clipMap  = new Map()  // animName → THREE.AnimationClip
 
 function initDocumentView(somDocument) {
   if (docView) { docView.dispose(); threeScene.remove(sceneGroup) }
@@ -102,6 +105,65 @@ function initDocumentView(somDocument) {
   const sceneDef = somDocument.document.getRoot().listScenes()[0]
   sceneGroup = docView.view(sceneDef)
   threeScene.add(sceneGroup)
+}
+
+// ---------------------------------------------------------------------------
+// Animation helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Build THREE.AnimationClip objects from a SOMDocument's glTF-Transform data.
+ *
+ * Finding (§2.1): @gltf-transform/view@4.3.0 does NOT create AnimationClip
+ * objects — AnimationClip is not imported in its bundle and sceneGroup.animations
+ * is always undefined. Clips are built here directly from the glTF-Transform
+ * document. Track paths use the glTF node name, which matches the Three.js
+ * Object3D name set by DocumentView (value.name = def.getName()).
+ */
+function buildClipsFromSOM(somDocument) {
+  const clips = []
+  for (const gltfAnim of somDocument.document.getRoot().listAnimations()) {
+    const tracks = []
+    for (const channel of gltfAnim.listChannels()) {
+      const sampler    = channel.getSampler()
+      const targetNode = channel.getTargetNode()
+      const targetPath = channel.getTargetPath()
+      if (!sampler || !targetNode) continue
+      const times  = sampler.getInput()?.getArray()
+      const values = sampler.getOutput()?.getArray()
+      if (!times || !values) continue
+      const nodeName = targetNode.getName()
+      let track
+      if (targetPath === 'rotation') {
+        track = new THREE.QuaternionKeyframeTrack(`${nodeName}.quaternion`, times, values)
+      } else if (targetPath === 'translation') {
+        track = new THREE.VectorKeyframeTrack(`${nodeName}.position`, times, values)
+      } else if (targetPath === 'scale') {
+        track = new THREE.VectorKeyframeTrack(`${nodeName}.scale`, times, values)
+      }
+      if (track) tracks.push(track)
+    }
+    if (tracks.length > 0) {
+      clips.push(new THREE.AnimationClip(gltfAnim.getName(), -1, tracks))
+    }
+  }
+  return clips
+}
+
+function initAnimations() {
+  if (mixer) mixer.stopAllAction()
+  mixer = null
+  clipMap.clear()
+
+  if (!client.som) return
+
+  const clips = buildClipsFromSOM(client.som)
+  for (const clip of clips) clipMap.set(clip.name, clip)
+
+  if (clips.length > 0) {
+    mixer = new THREE.AnimationMixer(sceneGroup)
+    console.log(`[app] AnimationMixer ready — ${clips.length} clip(s): ${clips.map(c => c.name).join(', ')}`)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -207,6 +269,36 @@ const nav = new NavigationController(avatar, {
   mouseSensitivity: 0.002,
 })
 
+const animCtrl = new AnimationController(client)
+
+animCtrl.on('animation:play', ({ animation }) => {
+  if (!mixer) return
+  const clip = clipMap.get(animation.name)
+  if (!clip) { console.warn(`[app] animation:play — no clip for "${animation.name}"`); return }
+  const action = mixer.clipAction(clip)
+  action.loop             = animation.loop ? THREE.LoopRepeat : THREE.LoopOnce
+  action.clampWhenFinished = !animation.loop
+  action.timeScale        = animation.timeScale
+  action.reset().play()
+  action.time             = animation.currentTime   // seek to computed position (late-joiner sync)
+})
+
+animCtrl.on('animation:pause', ({ animation }) => {
+  if (!mixer) return
+  const clip = clipMap.get(animation.name)
+  if (!clip) return
+  const action = mixer.existingAction(clip)
+  if (action) action.paused = true
+})
+
+animCtrl.on('animation:stop', ({ animation }) => {
+  if (!mixer) return
+  const clip = clipMap.get(animation.name)
+  if (!clip) return
+  const action = mixer.existingAction(clip)
+  if (action) action.stop()
+})
+
 // ---------------------------------------------------------------------------
 // Dynamic background reload - should move to another module
 // ---------------------------------------------------------------------------
@@ -253,6 +345,7 @@ client.on('world:loaded', ({ name, description, author }) => {
   threeScene.environment = null
 
   initDocumentView(client.som)
+  initAnimations()
 
   // Load equirectangular background from extras.atrium.background
   const extras = client.som.document.getRoot().getExtras()
@@ -560,6 +653,10 @@ function tick(now) {
 
   // NavigationController updates SOM nodes and calls avatar.setView
   nav.tick(dt)
+
+  // AnimationController drives timeupdate events; mixer advances playhead
+  animCtrl.tick(dt)
+  if (mixer) mixer.update(dt)
 
   // Sync Three.js camera from SOM state (stays in app.js)
   const localNode  = avatar.localNode

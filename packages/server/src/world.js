@@ -44,7 +44,7 @@ export async function createWorld(gltfPath, { baseUrl } = {}) {
   const worldBaseUrl = baseUrl ?? pathToFileURL(absPath).href
 
   const rootExtras = document.getRoot().getExtras()
-  const meta = rootExtras?.atrium?.world ?? {}
+  const meta = rootExtras?.atrium ?? {}
 
   // Names of nodes created by ingestExternalScene — filtered from som-dump
   const externalNodeNames = new Set()

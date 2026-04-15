@@ -17,7 +17,7 @@ async function loadWorld() {
 
 test('loads space.gltf and exposes world meta', async () => {
   const world = await loadWorld()
-  assert.equal(world.meta.name, 'Test World')
+  assert.equal(world.meta.name, 'Space')
 })
 
 test('finds a node by name', async () => {

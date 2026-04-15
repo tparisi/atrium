@@ -298,7 +298,7 @@ export class AtriumClient extends EventEmitter {
       })
     }
 
-    const meta = doc.getRoot().getExtras()?.atrium?.world ?? {}
+    const meta = doc.getRoot().getExtras()?.atrium ?? {}
     this._emitWorldLoaded(meta)
     // Re-resolve external references using the world URL from the original loadWorld call
     this.resolveExternalReferences()
@@ -557,7 +557,7 @@ export class AtriumClient extends EventEmitter {
   _finalizeWorldLoad(doc) {
     this._initSom(doc)
     this._attachMutationListeners()
-    const meta = doc.getRoot().getExtras()?.atrium?.world ?? {}
+    const meta = doc.getRoot().getExtras()?.atrium ?? {}
     this._emitWorldLoaded(meta)
     // Resolve external references asynchronously — base world is usable immediately
     this.resolveExternalReferences()
@@ -619,7 +619,7 @@ export class AtriumClient extends EventEmitter {
       }
 
       // Emit world:loaded for this reference — same event, extra fields present
-      const meta = this._som.document.getRoot().getExtras()?.atrium?.world ?? {}
+      const meta = this._som.document.getRoot().getExtras()?.atrium ?? {}
       this._emitWorldLoaded({ ...meta, source: url, containerName })
     } catch (err) {
       console.warn(`[AtriumClient] Failed to resolve external reference "${url}" for container "${containerName}":`, err.message)

@@ -172,34 +172,17 @@ async function main() {
   const buffer = doc.createBuffer().setURI('buffer.bin')
   const scene = doc.createScene('Scene')
 
-  // Preserve atrium world metadata on the root
   doc.getRoot().setExtras({
     atrium: {
-      version: '0.1.0',
-      world: {
-        name: 'Test World',
-        maxUsers: 10,
-        navigation: {
-          mode: ['WALK', 'FLY', 'ORBIT', 'TELEPORT'],
-          terrainFollowing: true,
-          speed: {
-            default: 1.4,
-            min: 0.5,
-            max: 5.0,
-          },
-          collision: {
-            enabled: false,
-          },
-          updateRate: {
-            positionInterval: 1000,
-            maxViewRate: 20,
-          },
-        },
-        capabilities: {
-          tick: { interval: 1000 },
-          physics: false,
-          chat: false,
-        },
+      name: 'Space',
+      description: 'A minimal gray-box test world.',
+      author: 'Project Atrium',
+      navigation: {
+        mode: ['WALK', 'FLY', 'ORBIT', 'TELEPORT'],
+        terrainFollowing: true,
+        speed: { default: 1.4, min: 0.5, max: 5.0 },
+        collision: { enabled: false },
+        updateRate: { positionInterval: 1000, maxViewRate: 20 },
       },
     },
   })

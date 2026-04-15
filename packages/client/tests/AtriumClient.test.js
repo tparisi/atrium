@@ -38,7 +38,7 @@ test('loadWorldFromData: glTF JSON string → SOM populated + world:loaded fires
   assert.ok(client.som, 'client.som is set after load')
   assert.ok(Array.isArray(client.som.nodes), 'som.nodes is an array')
   assert.ok(client.som.nodes.length > 0, 'SOM has at least one node')
-  assert.equal(data.name, 'Test World', 'world:loaded carries the world name from extras')
+  assert.equal(data.name, 'Space', 'world:loaded carries the world name from extras')
 })
 
 // ---------------------------------------------------------------------------
