@@ -357,12 +357,8 @@ export class AtriumClient extends EventEmitter {
     // Case 2: remote set — apply to SOM but guard against re-broadcast via mutation listener
     this._applyingRemote = true
     try {
-      if (msg.node === '__document__' && msg.field === 'extras') {
-        this._som.extras = msg.value
-      } else {
-        const node = this._som.getNodeByName(msg.node)
-        if (node) this._som.setPath(node, msg.field, msg.value)
-      }
+      const target = this._som.getObjectByName(msg.node)
+      if (target) this._som.setPath(target, msg.field, msg.value)
     } finally {
       this._applyingRemote = false
     }
@@ -415,7 +411,7 @@ export class AtriumClient extends EventEmitter {
   // Mutation listener attachment
   // ---------------------------------------------------------------------------
 
-  /** Attach mutation listeners to all nodes currently in the SOM, plus the document root. */
+  /** Attach mutation listeners to all nodes and animations currently in the SOM, plus the document root. */
   _attachMutationListeners() {
     if (!this._som) return
 
@@ -429,6 +425,11 @@ export class AtriumClient extends EventEmitter {
     // Node-level mutations
     for (const node of this._som.nodes) {
       this._attachNodeListeners(node)
+    }
+
+    // Animation-level mutations
+    for (const anim of this._som.animations) {
+      this._attachAnimationListeners(anim)
     }
   }
 
@@ -484,6 +485,19 @@ export class AtriumClient extends EventEmitter {
         this._onLocalMutation(nodeName, `camera.${event.detail.property}`, event.detail.value)
       })
     }
+  }
+
+  /**
+   * Attach a mutation listener to a single animation.
+   * Only the `playback` property is broadcast — timeupdate is local-only.
+   */
+  _attachAnimationListeners(anim) {
+    const animName = anim.name
+    anim.addEventListener('mutation', (event) => {
+      if (event.detail.property === 'playback') {
+        this._onLocalMutation(animName, 'playback', event.detail.value)
+      }
+    })
   }
 
   /** Called by mutation listeners — sends a `send` message to the server. */

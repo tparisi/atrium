@@ -62,7 +62,14 @@ export class SOMDocument extends SOMObject {
     this._sceneMap     = new Map()
 
     // Map keyed by name — for fast O(1) node lookup
-    this._nodesByName  = new Map()
+    this._nodesByName      = new Map()
+    // Map keyed by name — for fast O(1) animation lookup
+    this._animationsByName = new Map()
+    // Global flat namespace: all named SOM objects (nodes, animations, document)
+    this._objectsByName    = new Map()
+
+    // Register self as '__document__' in global namespace
+    this._objectsByName.set('__document__', this)
 
     this._buildObjectGraph()
   }
@@ -106,16 +113,13 @@ export class SOMDocument extends SOMObject {
       this._skinMap.set(s, new SOMSkin(s, this))
     }
 
-    // Animations
-    for (const a of this._root.listAnimations()) {
-      this._animationMap.set(a, new SOMAnimation(a))
-    }
-
-    // Nodes — wire mesh, camera, skin
+    // Nodes — wire mesh, camera, skin; register in _nodesByName + _objectsByName
     for (const n of this._root.listNodes()) {
       const somNode = new SOMNode(n, this)
       this._nodeMap.set(n, somNode)
-      this._nodesByName.set(n.getName(), somNode)
+      const name = n.getName()
+      this._nodesByName.set(name, somNode)
+      this._registerObject(name, somNode)
       this._registerNodeDispose(n, somNode)
       const m = n.getMesh()
       if (m) somNode._mesh = this._meshMap.get(m) ?? null
@@ -123,6 +127,15 @@ export class SOMDocument extends SOMObject {
       if (c) somNode._camera = this._cameraMap.get(c) ?? null
       const sk = n.getSkin()
       if (sk) somNode._skin = this._skinMap.get(sk) ?? null
+    }
+
+    // Animations — register in _animationsByName + _objectsByName (with collision check)
+    for (const a of this._root.listAnimations()) {
+      const somAnim = new SOMAnimation(a)
+      this._animationMap.set(a, somAnim)
+      const name = a.getName()
+      this._animationsByName.set(name, somAnim)
+      this._registerObject(name, somAnim)
     }
 
     // Scenes
@@ -135,12 +148,31 @@ export class SOMDocument extends SOMObject {
   // Internal helpers
   // ---------------------------------------------------------------------------
 
+  /**
+   * Register a named SOM object in the global namespace.
+   * Logs a warning and returns false if the name is already taken.
+   */
+  _registerObject(name, somObject) {
+    if (this._objectsByName.has(name)) {
+      const existing = this._objectsByName.get(name)
+      console.warn(
+        `SOM: duplicate name "${name}" — ` +
+        `${existing.constructor.name} already registered, ` +
+        `${somObject.constructor.name} will not be addressable by name`
+      )
+      return false
+    }
+    this._objectsByName.set(name, somObject)
+    return true
+  }
+
   /** Register a dispose callback so the node removes itself from caches when disposed. */
   _registerNodeDispose(gltfNode, somNode) {
     const name = gltfNode.getName()
     somNode._onDispose = () => {
       this._nodeMap.delete(gltfNode)
       this._nodesByName.delete(name)
+      this._objectsByName.delete(name)
     }
   }
 
@@ -205,6 +237,22 @@ export class SOMDocument extends SOMObject {
   }
 
   // ---------------------------------------------------------------------------
+  // Animation lookup (O(1) via name map)
+  // ---------------------------------------------------------------------------
+
+  getAnimationByName(name) {
+    return this._animationsByName.get(name) ?? null
+  }
+
+  // ---------------------------------------------------------------------------
+  // Global namespace lookup — returns any SOM object by name
+  // ---------------------------------------------------------------------------
+
+  getObjectByName(name) {
+    return this._objectsByName.get(name) ?? null
+  }
+
+  // ---------------------------------------------------------------------------
   // Collections — return cached wrapper instances
   // ---------------------------------------------------------------------------
 
@@ -242,7 +290,9 @@ export class SOMDocument extends SOMObject {
     if (descriptor.extras)      node.setExtras(descriptor.extras)
     const somNode = new SOMNode(node, this)
     this._nodeMap.set(node, somNode)
-    this._nodesByName.set(node.getName(), somNode)
+    const name = node.getName()
+    this._nodesByName.set(name, somNode)
+    this._registerObject(name, somNode)
     this._registerNodeDispose(node, somNode)
     return somNode
   }
@@ -280,11 +330,13 @@ export class SOMDocument extends SOMObject {
     return somPrim
   }
 
-  // Stubs for v0.1
   createAnimation(descriptor = {}) {
     const anim    = this._document.createAnimation(descriptor.name ?? '')
     const somAnim = new SOMAnimation(anim)
     this._animationMap.set(anim, somAnim)
+    const name = anim.getName()
+    this._animationsByName.set(name, somAnim)
+    this._registerObject(name, somAnim)
     return somAnim
   }
 
@@ -301,7 +353,9 @@ export class SOMDocument extends SOMObject {
 
     const somNode = new SOMNode(node, this)
     this._nodeMap.set(node, somNode)
-    this._nodesByName.set(node.getName(), somNode)
+    const name = node.getName()
+    this._nodesByName.set(name, somNode)
+    this._registerObject(name, somNode)
     this._registerNodeDispose(node, somNode)
 
     if (descriptor.mesh) {
@@ -465,6 +519,7 @@ export class SOMDocument extends SOMObject {
       const somNode = new SOMNode(node, this)
       this._nodeMap.set(node, somNode)
       this._nodesByName.set(prefixedName, somNode)
+      this._registerObject(prefixedName, somNode)
       this._registerNodeDispose(node, somNode)
 
       const extMesh = extNode.getMesh()

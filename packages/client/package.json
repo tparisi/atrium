@@ -6,6 +6,12 @@
   "author": "Tony Parisi / Metatron Studio",
   "type": "module",
   "main": "src/AtriumClient.js",
+  "exports": {
+    ".": "./src/AtriumClient.js",
+    "./AvatarController": "./src/AvatarController.js",
+    "./NavigationController": "./src/NavigationController.js",
+    "./AnimationController": "./src/AnimationController.js"
+  },
   "scripts": {
     "test": "node --test tests/*.test.js"
   },

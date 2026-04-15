@@ -90,10 +90,10 @@ export async function createWorld(gltfPath, { baseUrl } = {}) {
   }
 
   function setField(nodeName, field, value) {
-    const node = som.getNodeByName(nodeName)
-    if (!node) return { ok: false, code: 'NODE_NOT_FOUND' }
+    const target = som.getObjectByName(nodeName)
+    if (!target) return { ok: false, code: 'NODE_NOT_FOUND' }
     try {
-      som.setPath(node, field, value)
+      som.setPath(target, field, value)
     } catch {
       return { ok: false, code: 'INVALID_FIELD' }
     }
