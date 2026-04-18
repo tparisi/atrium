@@ -342,6 +342,49 @@ describe('view (server)', () => {
   })
 })
 
+// ─── playback with autoStart ──────────────────────────────────────
+
+describe('send with playback value containing autoStart', () => {
+  it('accepts playback with autoStart: true', () => {
+    const { valid } = validate('client', {
+      type: 'send', seq: 1,
+      node: 'CrateRotate', field: 'playback',
+      value: {
+        playing: false, paused: false, loop: true, autoStart: true,
+        timeScale: 1.0, startTime: 0, startWallClock: null, pauseTime: null,
+      },
+    })
+    assert.equal(valid, true)
+  })
+
+  it('accepts playback with autoStart: false', () => {
+    const { valid } = validate('client', {
+      type: 'send', seq: 2,
+      node: 'CrateRotate', field: 'playback',
+      value: {
+        playing: true, paused: false, loop: false, autoStart: false,
+        timeScale: 1.0, startTime: 0, startWallClock: Date.now(), pauseTime: null,
+      },
+    })
+    assert.equal(valid, true)
+  })
+})
+
+describe('set with playback value containing autoStart', () => {
+  it('accepts set message with autoStart in playback value', () => {
+    const { valid } = validate('server', {
+      type: 'set', seq: 5,
+      node: 'CrateRotate', field: 'playback',
+      value: {
+        playing: false, paused: false, loop: true, autoStart: true,
+        timeScale: 2.0, startTime: 0, startWallClock: null, pauseTime: null,
+      },
+      serverTime: Date.now(),
+    })
+    assert.equal(valid, true)
+  })
+})
+
 // ─── unknown message ──────────────────────────────────────────────
 
 describe('unknown message type', () => {

@@ -8,6 +8,7 @@ const DEFAULT_PLAYBACK = Object.freeze({
   playing:        false,
   paused:         false,
   loop:           false,
+  autoStart:      false,
   timeScale:      1.0,
   startTime:      0,
   startWallClock: null,
@@ -113,6 +114,7 @@ export class SOMAnimation extends SOMObject {
   get playing()        { return this._playback.playing }
   get paused()         { return this._playback.paused }
   get loop()           { return this._playback.loop }
+  get autoStart()      { return this._playback.autoStart }
   get timeScale()      { return this._playback.timeScale }
   get startTime()      { return this._playback.startTime }
   get startWallClock() { return this._playback.startWallClock }
@@ -143,6 +145,7 @@ export class SOMAnimation extends SOMObject {
       playing:        true,
       paused:         false,
       loop,
+      autoStart:      this._playback.autoStart,  // preserve authored hint
       timeScale,
       startTime,
       startWallClock: Date.now(),
@@ -163,7 +166,7 @@ export class SOMAnimation extends SOMObject {
   }
 
   stop() {
-    this.playback = { ...DEFAULT_PLAYBACK }
+    this.playback = { ...DEFAULT_PLAYBACK, autoStart: this._playback.autoStart }
   }
 
   // ---------------------------------------------------------------------------

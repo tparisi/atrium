@@ -74,12 +74,20 @@ export class AnimationController extends EventEmitter {
     const som = this._client.som
     if (!som) return
 
+    const peerCount = this._client.peerCount
+
     for (const anim of som.animations) {
       this._trackAnimation(anim)
-      // Late-joiner / authored auto-play: emit play for animations already running
       if (anim.playing) {
+        // Late-joiner path: animation already playing (from som-dump state)
         this._playing.add(anim)
         this.emit('animation:play', { animation: anim })
+      } else if (anim.playback.autoStart && peerCount === 0) {
+        // autoStart path: world authored to auto-play and no peers are present
+        const pb = anim.playback
+        anim.play({ loop: pb.loop, timeScale: pb.timeScale })
+        // _trackAnimation's mutation listener will emit animation:play and
+        // update _playing as a result of the play() call above
       }
     }
   }
@@ -128,6 +136,8 @@ export class AnimationController extends EventEmitter {
         this._playing.delete(anim)
         this.emit('animation:stop', { animation: anim })
       }
+      // Always emit playback-changed so renderers can update loop/timeScale live
+      this.emit('animation:playback-changed', { animation: anim, playback: pb })
     }
 
     anim.addEventListener('mutation', mutationListener)

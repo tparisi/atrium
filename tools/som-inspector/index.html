@@ -340,7 +340,7 @@
     flex-shrink: 0;
     border-top: 1px solid #222;
     overflow-y: auto;
-    max-height: 180px;
+    max-height: 240px;
     padding: 4px 0;
   }
 
@@ -351,6 +351,11 @@
     font-family: 'Cascadia Code', 'Fira Code', monospace;
   }
 
+  .anim-wrapper {
+    border-bottom: 1px solid #1a1a1a;
+  }
+  .anim-wrapper:last-child { border-bottom: none; }
+
   .anim-row {
     display: flex;
     align-items: center;
@@ -358,9 +363,19 @@
     padding: 3px 8px;
     font-size: 11px;
     font-family: 'Cascadia Code', 'Fira Code', monospace;
-    border-bottom: 1px solid #1a1a1a;
   }
-  .anim-row:last-child { border-bottom: none; }
+
+  .anim-triangle {
+    flex-shrink: 0;
+    width: 12px;
+    text-align: center;
+    font-size: 9px;
+    color: #475569;
+    cursor: pointer;
+    user-select: none;
+    line-height: 1;
+  }
+  .anim-triangle:hover { color: #94a3b8; }
 
   .anim-name {
     flex: 1;
@@ -393,6 +408,67 @@
     min-width: 22px;
   }
   .anim-btn:disabled { opacity: 0.25; }
+
+  /* ── Animation detail (expanded) ───────────────────── */
+  .anim-detail {
+    padding: 4px 8px 6px 28px;
+    background: #0f0f0f;
+    border-top: 1px solid #1a1a1a;
+  }
+
+  .anim-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .anim-field-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+  }
+
+  .anim-field-label {
+    flex: 0 0 90px;
+    color: #475569;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .anim-field-value {
+    color: #94a3b8;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .anim-field-hint {
+    color: #334155;
+    font-size: 9px;
+    flex-shrink: 0;
+  }
+
+  .anim-field-number {
+    width: 56px;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 3px;
+    color: #cbd5e1;
+    padding: 1px 3px;
+    font-size: 10px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+  }
+  .anim-field-number:focus { outline: none; border-color: #4f46e5; }
+
+  .anim-fields input[type="checkbox"] {
+    accent-color: #a78bfa;
+    width: 12px; height: 12px;
+    cursor: pointer;
+  }
 
   /* ── 3D Viewport ────────────────────────────────────── */
   #viewport {

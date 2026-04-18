@@ -128,7 +128,37 @@ function initAnimations() {
 
   if (clips.length > 0) {
     mixer = new THREE.AnimationMixer(sceneGroup)
+    mixer.addEventListener('finished', ({ action }) => {
+      const clip = action.getClip()
+      const anim = client.som?.getAnimationByName(clip.name)
+      if (anim && anim.playing) anim.stop()
+    })
     console.log(`[inspector] AnimationMixer ready — ${clips.length} clip(s): ${clips.map(c => c.name).join(', ')}`)
+  }
+}
+
+/**
+ * Reconcile the Three.js mixer to the current SOM playing state.
+ *
+ * Called immediately after initAnimations() so that animations already
+ * playing in the SOM (late-joiner som-dump, autoStart synchronous call,
+ * or static load autoStart) are started in the mixer even if the
+ * animation:play events fired before the mixer existed.
+ */
+function replayPlayingAnimations(som) {
+  if (!mixer) return
+  for (const anim of som.animations) {
+    if (!anim.playing) continue
+    const clip = clipMap.get(anim.name)
+    if (!clip) { console.warn(`[inspector] replayPlayingAnimations — no clip for "${anim.name}"`); continue }
+    const pb     = anim.playback
+    const action = mixer.clipAction(clip)
+    action.loop              = pb.loop ? THREE.LoopRepeat : THREE.LoopOnce
+    action.clampWhenFinished = !pb.loop
+    action.timeScale         = pb.timeScale
+    action.reset().play()
+    action.time              = anim.currentTime   // seek to computed position
+    console.log(`[inspector] replayPlayingAnimations — started "${anim.name}" at t=${anim.currentTime.toFixed(2)}`)
   }
 }
 
@@ -191,6 +221,16 @@ animCtrl.on('animation:stop', ({ animation }) => {
   if (!clip) return
   const action = mixer.existingAction(clip)
   if (action) action.stop()
+})
+
+animCtrl.on('animation:playback-changed', ({ animation, playback }) => {
+  if (!mixer) return
+  const clip = clipMap.get(animation.name)
+  if (!clip) return
+  const action = mixer.existingAction(clip)
+  if (!action) return
+  action.setLoop(playback.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity)
+  action.setEffectiveTimeScale(playback.timeScale)
 })
 
 // ---------------------------------------------------------------------------
@@ -279,6 +319,7 @@ client.on('world:loaded', ({ name }) => {
 
   initDocumentView(client.som)
   initAnimations()
+  replayPlayingAnimations(client.som)
   treeView.build(client.som)
   propSheet.clear()
   worldInfo.show(client.som)

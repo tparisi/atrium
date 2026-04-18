@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Tony Parisi / Metatron Studio. See LICENSE in repo root.
 //
-// Generates tests/fixtures/space-anim.gltf — space.gltf plus two loopable
-// animations targeting crate-01: CrateRotate (Y-axis rotation, 4s) and
-// CrateBob (Y-axis translation oscillation, 2s).
+// Generates tests/fixtures/space-anim-autoplay.gltf — identical to
+// space-anim.gltf but with both animations authored to autostart and loop.
 //
 // Run from repo root:
-//   node tests/fixtures/generate-space-anim.js
+//   node tests/fixtures/generate-space-anim-autoplay.js
 
 import { writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
@@ -22,13 +21,28 @@ const { Document, NodeIO } = await import(coreUrl)
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname  = dirname(__filename)
-const OUT_PATH   = join(__dirname, 'space-anim.gltf')
+const OUT_PATH   = join(__dirname, 'space-anim-autoplay.gltf')
+
+const AUTOPLAY_PLAYBACK = {
+  playing:        false,
+  paused:         false,
+  loop:           true,
+  autoStart:      true,
+  timeScale:      1.0,
+  startTime:      0,
+  startWallClock: null,
+  pauseTime:      null,
+}
 
 async function main() {
   const doc = buildSpaceAnimDoc({
     Document,
-    worldName:        'Space (Animated)',
-    worldDescription: 'A minimal gray-box test world with animations.',
+    worldName:        'Space (Autoplay)',
+    worldDescription: 'A minimal gray-box test world with autostarting looped animations.',
+    animExtras: {
+      CrateRotate: { playback: { ...AUTOPLAY_PLAYBACK } },
+      CrateBob:    { playback: { ...AUTOPLAY_PLAYBACK } },
+    },
   })
 
   const io = new NodeIO()

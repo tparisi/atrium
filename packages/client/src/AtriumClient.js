@@ -117,6 +117,23 @@ export class AtriumClient extends EventEmitter {
   get displayName() { return this._displayName }
 
   /**
+   * Count of peer avatars present in the SOM (ephemeral nodes other than the
+   * local avatar). Zero when no world is loaded or no peers are connected.
+   * At world:loaded time this reflects peers already in the som-dump.
+   *
+   * The local avatar is excluded by name so that a freshly-connected client
+   * whose own avatar node is already in the som-dump returns 0, not 1.
+   */
+  get peerCount() {
+    if (!this._som) return 0
+    const localName = this._displayName ?? null
+    return this._som.nodes.filter(n =>
+      n.extras?.atrium?.ephemeral === true &&
+      n.name !== localName
+    ).length
+  }
+
+  /**
    * HTTP base URL used to resolve relative `extras.atrium.source` paths.
    * Set automatically by loadWorld(). Can be set manually by the app layer
    * for connect-only flows where loadWorld() is not called.

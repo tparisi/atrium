@@ -64,3 +64,73 @@ test('loadWorldFromData: GLB ArrayBuffer → SOM populated + world:loaded fires'
   assert.ok(client.som, 'client.som is set after GLB load')
   assert.ok(client.som.nodes.length > 0, 'SOM has at least one node from the GLB')
 })
+
+// ---------------------------------------------------------------------------
+// peerCount getter
+// ---------------------------------------------------------------------------
+
+/** Build a SOMDocument with controllable ephemeral nodes and a local name. */
+async function makeSomForPeerCount({ localName = null, ephemeralNames = [], staticNames = [] } = {}) {
+  const doc = new Document()
+  const scene = doc.createScene('Scene')
+
+  for (const name of ephemeralNames) {
+    const n = doc.createNode(name)
+    n.setExtras({ atrium: { ephemeral: true } })
+    scene.addChild(n)
+  }
+  for (const name of staticNames) {
+    scene.addChild(doc.createNode(name))
+  }
+
+  const io = new NodeIO()
+  const glb = await io.writeBinary(doc)
+
+  const client = new AtriumClient()
+  if (localName) client._displayName = localName   // simulate post-handshake state
+
+  const loaded = waitForEvent(client, 'world:loaded')
+  await client.loadWorldFromData(glb.buffer, 'test.glb')
+  await loaded
+
+  return client
+}
+
+test('peerCount: empty SOM → 0', async () => {
+  const client = await makeSomForPeerCount()
+  assert.strictEqual(client.peerCount, 0)
+})
+
+test('peerCount: only local avatar in SOM → 0 (local excluded)', async () => {
+  const client = await makeSomForPeerCount({
+    localName:      'User-abcd',
+    ephemeralNames: ['User-abcd'],
+  })
+  assert.strictEqual(client.peerCount, 0)
+})
+
+test('peerCount: local avatar plus one peer → 1', async () => {
+  const client = await makeSomForPeerCount({
+    localName:      'User-abcd',
+    ephemeralNames: ['User-abcd', 'User-ef01'],
+  })
+  assert.strictEqual(client.peerCount, 1)
+})
+
+test('peerCount: two peers, no local avatar yet (pre-handshake) → 2', async () => {
+  // localName is null — _displayName not yet assigned
+  const client = await makeSomForPeerCount({
+    localName:      null,
+    ephemeralNames: ['User-1111', 'User-2222'],
+  })
+  assert.strictEqual(client.peerCount, 2)
+})
+
+test('peerCount: non-ephemeral nodes are not counted', async () => {
+  const client = await makeSomForPeerCount({
+    localName:      'User-abcd',
+    ephemeralNames: ['User-abcd'],
+    staticNames:    ['ground', 'crate-01', 'crate-02'],
+  })
+  assert.strictEqual(client.peerCount, 0)
+})

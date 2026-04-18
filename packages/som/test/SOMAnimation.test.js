@@ -107,6 +107,7 @@ test('SOMAnimation: default playback state', () => {
   assert.strictEqual(anim.playing, false)
   assert.strictEqual(anim.paused, false)
   assert.strictEqual(anim.loop, false)
+  assert.strictEqual(anim.autoStart, false)
   assert.strictEqual(anim.timeScale, 1.0)
   assert.strictEqual(anim.currentTime, 0)
 })
@@ -282,4 +283,78 @@ test('playback state persists to extras.atrium.playback on animation', () => {
   const raw = anim._animation.getExtras()
   assert.strictEqual(raw?.atrium?.playback?.playing, true)
   assert.strictEqual(raw?.atrium?.playback?.loop, true)
+})
+
+// ---------------------------------------------------------------------------
+// autoStart
+// ---------------------------------------------------------------------------
+
+test('autoStart: default value is false', () => {
+  const som = makeAnimDoc()
+  const anim = som.getAnimationByName('Walk')
+  assert.strictEqual(anim.autoStart, false)
+  assert.strictEqual(anim.playback.autoStart, false)
+})
+
+test('autoStart: can be set via playback setter and round-trips', () => {
+  const som = makeAnimDoc()
+  const anim = som.getAnimationByName('Walk')
+  anim.playback = { ...anim.playback, autoStart: true }
+  assert.strictEqual(anim.autoStart, true)
+  // Persisted to extras
+  const raw = anim._animation.getExtras()
+  assert.strictEqual(raw?.atrium?.playback?.autoStart, true)
+})
+
+test('autoStart: play() preserves authored autoStart value', () => {
+  const som = makeAnimDoc()
+  const anim = som.getAnimationByName('Walk')
+  anim.playback = { ...anim.playback, autoStart: true }
+  anim.play({ loop: true })
+  assert.strictEqual(anim.autoStart, true)
+  assert.strictEqual(anim.playing, true)
+})
+
+test('autoStart: pause() preserves autoStart value', () => {
+  const som = makeAnimDoc()
+  const anim = som.getAnimationByName('Walk')
+  anim.playback = { ...anim.playback, autoStart: true }
+  anim.play()
+  anim.pause()
+  assert.strictEqual(anim.autoStart, true)
+})
+
+test('autoStart: stop() preserves autoStart value', () => {
+  const som = makeAnimDoc()
+  const anim = som.getAnimationByName('Walk')
+  anim.playback = { ...anim.playback, autoStart: true }
+  anim.play()
+  anim.stop()
+  assert.strictEqual(anim.playing, false)
+  assert.strictEqual(anim.autoStart, true)
+})
+
+test('autoStart: persists to extras.atrium.playback and reloads via fresh SOMDocument', () => {
+  const doc = new Document()
+  const scene = doc.createScene('Scene')
+  const node = doc.createNode('Cube').setTranslation([0,0,0])
+  scene.addChild(node)
+  const buf = doc.createBuffer()
+  const timeAcc = doc.createAccessor().setType('SCALAR').setArray(new Float32Array([0, 1])).setBuffer(buf)
+  const valAcc = doc.createAccessor().setType('VEC3').setArray(new Float32Array([0,0,0, 0,1,0])).setBuffer(buf)
+  const sampler = doc.createAnimationSampler().setInput(timeAcc).setOutput(valAcc).setInterpolation('LINEAR')
+  const channel = doc.createAnimationChannel().setTargetNode(node).setTargetPath('translation').setSampler(sampler)
+  doc.createAnimation('Walk').addSampler(sampler).addChannel(channel)
+
+  const som = new SOMDocument(doc)
+  const anim = som.getAnimationByName('Walk')
+  anim.playback = { ...anim.playback, autoStart: true, loop: true }
+  // Verify raw extras written
+  const raw = anim._animation.getExtras()
+  assert.strictEqual(raw?.atrium?.playback?.autoStart, true)
+  // Fresh SOMDocument over same gltf-transform Document reads it back
+  const som2 = new SOMDocument(doc)
+  const anim2 = som2.getAnimationByName('Walk')
+  assert.strictEqual(anim2.autoStart, true)
+  assert.strictEqual(anim2.loop, true)
 })
