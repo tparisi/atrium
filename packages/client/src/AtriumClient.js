@@ -3,7 +3,7 @@
 
 import { WebIO } from '@gltf-transform/core'
 import { KHRONOS_EXTENSIONS } from '@gltf-transform/extensions'
-import { SOMDocument } from '@atrium/som'
+import { SOMDocument, SOMEvent } from '@atrium/som'
 
 // ---------------------------------------------------------------------------
 // Minimal EventEmitter — works in Node.js and browsers without a build step
@@ -101,6 +101,11 @@ export class AtriumClient extends EventEmitter {
 
     // Loopback prevention flag — true while applying a remote set
     this._applyingRemote = false
+
+    // Pointer event state — cleared on world:loaded and disconnect
+    this._capturedNode      = null
+    this._currentHoverNode  = null
+    this._pointerDownTarget = null
   }
 
   // ---------------------------------------------------------------------------
@@ -131,6 +136,67 @@ export class AtriumClient extends EventEmitter {
       n.extras?.atrium?.ephemeral === true &&
       n.name !== localName
     ).length
+  }
+
+  /**
+   * True while a SOM node holds pointer capture. Renderers can check this
+   * after dispatching `pointerdown` to decide whether to suppress camera drag.
+   */
+  get hasPointerCapture() { return this._capturedNode !== null }
+
+  /**
+   * Dispatch a pointer event to the SOM, managing hover transitions, pointer
+   * capture, and click synthesis.
+   *
+   * @param {SOMNode|null} somNode - Resolved hit target, or null if off-geometry
+   * @param {string}       type   - 'pointermove'|'pointerdown'|'pointerup'
+   * @param {object}       detail - Event detail (point, normal, ray, buttons, …)
+   */
+  dispatchPointerEvent(somNode, type, detail) {
+    const fullDetail = { ...detail, stopPropagation() {} }
+
+    if (this._capturedNode) {
+      const target = this._capturedNode
+      this._dispatchOnNode(target, type, fullDetail)
+      if (type === 'pointerup') {
+        if (somNode === target) this._dispatchOnNode(target, 'click', fullDetail)
+        this._capturedNode = null
+      }
+      return
+    }
+
+    if (type === 'pointermove') {
+      if (somNode !== this._currentHoverNode) {
+        if (this._currentHoverNode) this._dispatchOnNode(this._currentHoverNode, 'pointerout', fullDetail)
+        if (somNode)                this._dispatchOnNode(somNode, 'pointerover', fullDetail)
+        this._currentHoverNode = somNode
+      }
+      if (somNode) this._dispatchOnNode(somNode, 'pointermove', fullDetail)
+    } else if (type === 'pointerdown') {
+      if (somNode) {
+        this._dispatchOnNode(somNode, 'pointerdown', fullDetail)
+        this._pointerDownTarget = somNode
+      }
+    } else if (type === 'pointerup') {
+      if (somNode) {
+        this._dispatchOnNode(somNode, 'pointerup', fullDetail)
+        if (somNode === this._pointerDownTarget) this._dispatchOnNode(somNode, 'click', fullDetail)
+      }
+      this._pointerDownTarget = null
+    }
+  }
+
+  /**
+   * Capture all subsequent pointer events to `somNode` until pointerup or
+   * explicit release. Call from within a `pointerdown` handler.
+   */
+  setPointerCapture(somNode) {
+    this._capturedNode = somNode
+  }
+
+  /** Release pointer capture explicitly. Also released automatically on pointerup. */
+  releasePointerCapture() {
+    this._capturedNode = null
   }
 
   /**
@@ -235,6 +301,7 @@ export class AtriumClient extends EventEmitter {
       clearTimeout(this._viewFlushTimer)
       this._viewFlushTimer = null
     }
+    this._clearPointerState()
   }
 
   /**
@@ -655,7 +722,15 @@ export class AtriumClient extends EventEmitter {
     this._navInfo = doc.getRoot().getExtras()?.atrium?.navigation ?? null
   }
 
+  _clearPointerState() {
+    this._capturedNode      = null
+    this._currentHoverNode  = null
+    this._pointerDownTarget = null
+  }
+
   _emitWorldLoaded(meta) {
+    // Clear pointer capture / hover — SOM nodes from previous world are invalid
+    this._clearPointerState()
     const name          = meta.name          ?? undefined
     const desc          = meta.description   ?? undefined
     const author        = meta.author        ?? undefined
@@ -669,6 +744,19 @@ export class AtriumClient extends EventEmitter {
       this._log(`External ref loaded: "${containerName}" ← ${source}`)
     }
     this.emit('world:loaded', { name, description: desc, author, source, containerName })
+  }
+
+  /** Dispatch a SOMEvent on `node`, no-op if no listeners of that type.
+   *  `event.target` is the SOM node (set via SOMEvent constructor).
+   *  `event.detail` is plain data only — `target` is removed after construction
+   *  so it does not appear in the detail object (avoids leaking the full SOM
+   *  graph when callers log or serialize event.detail).
+   */
+  _dispatchOnNode(node, type, detail) {
+    if (!node._hasListeners(type)) return
+    const evt = new SOMEvent(type, { target: node, ...detail })
+    delete evt.detail.target   // keep detail plain-data; event.target is the canonical slot
+    node._dispatchEvent(evt)
   }
 
   _wsSend(msg) {

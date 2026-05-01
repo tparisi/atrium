@@ -343,6 +343,134 @@ animCtrl.on('animation:playback-changed', ({ animation, playback }) => {
 })
 
 // ---------------------------------------------------------------------------
+// Pointer input — hit-testing and SOM pointer event dispatch
+// ---------------------------------------------------------------------------
+
+const raycaster = new THREE.Raycaster()
+const ndc       = new THREE.Vector2()
+
+/**
+ * Run a ray from the camera through the DOM pointer position and return the
+ * closest SOM node hit, or null. Always updates raycaster.ray so buildDetail
+ * can read the current ray regardless of whether anything was hit.
+ */
+function hitTest(domEvent) {
+  const rect = canvas.getBoundingClientRect()
+  ndc.x =  ((domEvent.clientX - rect.left) / rect.width)  * 2 - 1
+  ndc.y = -((domEvent.clientY - rect.top)  / rect.height) * 2 + 1
+  raycaster.setFromCamera(ndc, camera)
+  if (!sceneGroup || !client.som) return null
+  const hits = raycaster.intersectObject(sceneGroup, true)
+  if (hits.length === 0) return null
+  return resolveHitToSOMNode(hits[0])
+}
+
+/**
+ * Walk up the Object3D hierarchy of the closest hit until we find a name
+ * that matches a SOM node. Returns { node, point, normal, hit } or null.
+ * DocumentView sets Object3D.name = gltfNode.getName(), same as animation clips.
+ */
+function resolveHitToSOMNode(hit) {
+  let obj = hit.object
+  while (obj) {
+    if (obj.name) {
+      const node = client.som?.getNodeByName(obj.name)
+      if (node) return { node, point: hit.point, normal: hit.face?.normal, hit }
+    }
+    obj = obj.parent
+  }
+  return null
+}
+
+/**
+ * Build the pointer event detail object from a DOM event and an optional hit
+ * result.
+ *
+ * Coordinate-space notes:
+ *   - hit.point        is already world-space (Three.js applies transforms).
+ *   - hit.face.normal  is mesh-LOCAL space — needs transformDirection(matrixWorld)
+ *     for world-space. This asymmetry is a Three.js historical quirk.
+ *   - worldToLocal()   mutates its argument — always clone before calling.
+ */
+function buildDetail(domEvent, hitResult) {
+  const detail = {
+    pointerId: domEvent.pointerId ?? 1,
+    button:    domEvent.button,
+    buttons:   domEvent.buttons,
+    ray: {
+      origin:    raycaster.ray.origin.toArray(),
+      direction: raycaster.ray.direction.toArray(),
+    },
+    shiftKey: domEvent.shiftKey,
+    ctrlKey:  domEvent.ctrlKey,
+    altKey:   domEvent.altKey,
+    metaKey:  domEvent.metaKey,
+  }
+
+  if (hitResult) {
+    const { hit } = hitResult
+
+    // World-space point — already world-space from Three.js
+    detail.point = hit.point.toArray()
+
+    // Local-space point — worldToLocal mutates; clone first
+    detail.localPoint = hit.object.worldToLocal(hit.point.clone()).toArray()
+
+    // Distance along ray
+    detail.distance = hit.distance
+
+    // Normals: face.normal is mesh-local; derive both local and world variants.
+    // Geometry without face data (points, lines) → both null.
+    if (hit.face) {
+      detail.localNormal = hit.face.normal.toArray()
+      detail.normal      = hit.face.normal.clone()
+        .transformDirection(hit.object.matrixWorld)
+        .toArray()
+    } else {
+      detail.localNormal = null
+      detail.normal      = null
+    }
+
+    // UV at hit point — Three.js interpolates when a uv attribute exists
+    detail.uv = hit.uv ? hit.uv.toArray() : null
+  } else {
+    // Off-geometry: position/surface fields null; ray + keys still meaningful
+    detail.point       = null
+    detail.localPoint  = null
+    detail.normal      = null
+    detail.localNormal = null
+    detail.distance    = null
+    detail.uv          = null
+  }
+
+  return detail
+}
+
+// ── DOM → SOM dispatch ──────────────────────────────────────────────────────
+
+canvas.addEventListener('mousemove', (e) => {
+  const result = hitTest(e)
+  client.dispatchPointerEvent(result?.node ?? null, 'pointermove', buildDetail(e, result))
+})
+
+canvas.addEventListener('mousedown', (e) => {
+  const result = hitTest(e)
+  if (result) {
+    client.dispatchPointerEvent(result.node, 'pointerdown', buildDetail(e, result))
+    // If a handler called setPointerCapture, suppress camera drag
+    if (client.hasPointerCapture) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+  }
+})
+
+canvas.addEventListener('mouseup', (e) => {
+  const result = hitTest(e)
+  client.dispatchPointerEvent(result?.node ?? null, 'pointerup', buildDetail(e, result))
+})
+
+// ---------------------------------------------------------------------------
 // Dynamic background reload - should move to another module
 // ---------------------------------------------------------------------------
 
@@ -423,6 +551,16 @@ client.on('world:loaded', ({ name, description, author }) => {
   // Console metadata
   console.log(`[app] World: ${name ?? '(unnamed)'}${author ? ` by ${author}` : ''}`)
   if (description) console.log(`[app]   ${description}`)
+
+  // ── Diagnostic pointer-event handlers (all non-ephemeral nodes) ──────────
+  for (const node of client.som.nodes) {
+    if (node.extras?.atrium?.ephemeral) continue   // skip avatars
+    node.addEventListener('pointerover', () => console.log('[pointer] over',  node.name))
+    node.addEventListener('pointerout',  () => console.log('[pointer] out',   node.name))
+    node.addEventListener('pointerdown', (e) => console.log('[pointer] down', node.name, 'button', e.detail.button))
+    node.addEventListener('pointerup',   () => console.log('[pointer] up',    node.name))
+    node.addEventListener('click',       (e) => console.log('[pointer] click', node.name, 'at', e.detail.point))
+  }
 })
 
 client.on('session:ready', () => {
