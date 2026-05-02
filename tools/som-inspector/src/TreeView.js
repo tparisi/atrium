@@ -50,6 +50,26 @@ export class TreeView {
     return this._som.getNodeByName(this._selectedName) ?? null
   }
 
+  /**
+   * Programmatically select a SOM node, mirroring the tree-click behavior.
+   * Updates the visual highlight, internal selected-name state, and calls
+   * onSelect so the property sheet stays in sync.
+   * Pass null to deselect.
+   */
+  selectNode(somNode) {
+    const prev = this._container.querySelector('.tree-row.selected')
+    if (prev) prev.classList.remove('selected')
+    this._selectedName = null
+
+    if (!somNode) return
+
+    const row = this._container.querySelector(`[data-node-name="${CSS.escape(somNode.name)}"]`)
+    if (!row) return
+    row.classList.add('selected')
+    this._selectedName = somNode.name
+    this.onSelect?.(somNode)
+  }
+
   // ---------------------------------------------------------------------------
   // Private — DOM construction
   // ---------------------------------------------------------------------------
