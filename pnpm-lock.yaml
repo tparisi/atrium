@@ -48,6 +48,19 @@ importers:
         specifier: ^8.0.0
         version: 8.18.0
 
+  packages/renderer-three:
+    dependencies:
+      '@atrium/client':
+        specifier: workspace:*
+        version: link:../client
+      '@atrium/som':
+        specifier: workspace:*
+        version: link:../som
+    devDependencies:
+      three:
+        specifier: ^0.163.0
+        version: 0.163.0
+
   packages/server:
     dependencies:
       '@atrium/gltf-extension':
@@ -104,6 +117,9 @@ packages:
     resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
     engines: {node: '>=0.10.0'}
 
+  three@0.163.0:
+    resolution: {integrity: sha512-HlMgCb2TF/dTLRtknBnjUTsR8FsDqBY43itYop2+Zg822I+Kd0Ua2vs8CvfBVefXkBdNDrLMoRTGCIIpfCuDew==}
+
   ws@8.19.0:
     resolution: {integrity: sha512-blAT2mjOEIi0ZzruJfIhb3nps74PRWTCz1IjglWEEpQl5XS/UNama6u2/rjFkDDouqr4L67ry+1aGIALViWjDg==}
     engines: {node: '>=10.0.0'}
@@ -145,5 +161,7 @@ snapshots:
   property-graph@4.0.0: {}
 
   require-from-string@2.0.2: {}
+
+  three@0.163.0: {}
 
   ws@8.19.0: {}

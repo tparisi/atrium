@@ -1,0 +1,13 @@
+{
+  "name": "@atrium/app-playground",
+  "version": "0.1.0",
+  "description": "Atrium pointer-event playground — three demonstration scenes: rollover, click-toggle, drag-translate.",
+  "license": "MIT",
+  "author": "Tony Parisi / Metatron Studio",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@atrium/client": "workspace:*",
+    "@atrium/renderer-three": "workspace:*"
+  }
+}

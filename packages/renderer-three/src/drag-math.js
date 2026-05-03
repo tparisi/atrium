@@ -4,8 +4,8 @@
 /**
  * drag-math.js — pure helpers for viewport drag-to-translate.
  *
- * No Three.js import: functions take plain objects and return THREE objects
- * only when THREE is passed in. Kept pure so Session 34 extraction is clean.
+ * Moved from tools/som-inspector/src/drag-math.js (Session 33) into the
+ * shared package at Session 34. API unchanged.
  */
 
 import * as THREE from 'three'
@@ -36,7 +36,7 @@ export function projectRayToPlane(ray, planeY) {
  *
  * Returns the identity matrix when the object has no parent (world = local).
  *
- * @param {THREE.Object3D} threeObj
+ * @param {{ parent: { matrixWorld: THREE.Matrix4 } | null }} threeObj
  * @returns {THREE.Matrix4}
  */
 export function computeParentInverse(threeObj) {

@@ -11,7 +11,7 @@ import { TreeView }              from './TreeView.js'
 import { PropertySheet }         from './PropertySheet.js'
 import { WorldInfoPanel }        from './WorldInfoPanel.js'
 import { AnimationsPanel }       from './AnimationsPanel.js'
-import { projectRayToPlane, computeParentInverse } from './drag-math.js'
+import { PointerInputBridge, projectRayToPlane, computeParentInverse } from '@atrium/renderer-three'
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -178,13 +178,6 @@ window.addEventListener('resize', onResize)
 onResize()
 
 // ---------------------------------------------------------------------------
-// Pointer hit-testing scratch objects
-// ---------------------------------------------------------------------------
-
-const raycaster = new THREE.Raycaster()
-const ndc       = new THREE.Vector2()
-
-// ---------------------------------------------------------------------------
 // AtriumClient / AvatarController / NavigationController
 // ---------------------------------------------------------------------------
 
@@ -288,11 +281,20 @@ treeView.onSelect = (somNode) => {
 }
 
 // ---------------------------------------------------------------------------
-// Pointer input — hit-testing, selection, and drag
+// Pointer input — PointerInputBridge + selection/drag
 // ---------------------------------------------------------------------------
 
 let selected  = null   // currently selected SOMNode
 let dragState = null   // null when no drag; populated for drag-to-translate
+
+// Bridge constructed once; sceneRoot is a getter so it follows world reloads.
+const pointerBridge = new PointerInputBridge({
+  client,
+  canvas,
+  camera,
+  sceneRoot:         () => sceneGroup,
+  suppressOnCapture: true,   // stop nav drag when a node has pointer capture
+})
 
 /**
  * Set the active selection. Updates treeView (visual + onSelect → propSheet)
@@ -301,91 +303,6 @@ let dragState = null   // null when no drag; populated for drag-to-translate
 function setSelected(somNode) {
   selected = somNode
   treeView.selectNode(somNode)   // handles visual + propSheet via onSelect
-}
-
-/**
- * Run a ray from the camera through the DOM pointer position and return the
- * closest SOM node hit, or null. Always updates raycaster.ray so buildDetail
- * can read the current ray regardless of whether anything was hit.
- */
-function hitTest(domEvent) {
-  const rect = canvas.getBoundingClientRect()
-  ndc.x =  ((domEvent.clientX - rect.left) / rect.width)  * 2 - 1
-  ndc.y = -((domEvent.clientY - rect.top)  / rect.height) * 2 + 1
-  raycaster.setFromCamera(ndc, camera)
-  if (!sceneGroup || !client.som) return null
-  const hits = raycaster.intersectObject(sceneGroup, true)
-  if (hits.length === 0) return null
-  return resolveHitToSOMNode(hits[0])
-}
-
-/**
- * Walk up the Object3D hierarchy of the closest hit until we find a name
- * that matches a SOM node. Returns { node, hit, threeObj } or null.
- * DocumentView sets Object3D.name = gltfNode.getName() — same convention as
- * animation clips.
- */
-function resolveHitToSOMNode(hit) {
-  let obj = hit.object
-  while (obj) {
-    if (obj.name) {
-      const node = client.som?.getNodeByName(obj.name)
-      if (node) return { node, hit, threeObj: obj }
-    }
-    obj = obj.parent
-  }
-  return null
-}
-
-/**
- * Build the pointer event detail from a DOM event and an optional hit result.
- * Same shape as apps/client's buildDetail (Session 32 + amendment).
- *
- * Coordinate-space notes (see apps/client for full explanation):
- *   - hit.point        is already world-space.
- *   - hit.face.normal  is mesh-LOCAL space — needs transformDirection() for world.
- *   - worldToLocal()   mutates — always clone first.
- */
-function buildDetail(domEvent, hitResult) {
-  const detail = {
-    pointerId: domEvent.pointerId ?? 1,
-    button:    domEvent.button,
-    buttons:   domEvent.buttons,
-    ray: {
-      origin:    raycaster.ray.origin.toArray(),
-      direction: raycaster.ray.direction.toArray(),
-    },
-    shiftKey: domEvent.shiftKey,
-    ctrlKey:  domEvent.ctrlKey,
-    altKey:   domEvent.altKey,
-    metaKey:  domEvent.metaKey,
-  }
-
-  if (hitResult) {
-    const { hit } = hitResult
-    detail.point      = hit.point.toArray()
-    detail.localPoint = hit.object.worldToLocal(hit.point.clone()).toArray()
-    detail.distance   = hit.distance
-    if (hit.face) {
-      detail.localNormal = hit.face.normal.toArray()
-      detail.normal      = hit.face.normal.clone()
-        .transformDirection(hit.object.matrixWorld)
-        .toArray()
-    } else {
-      detail.localNormal = null
-      detail.normal      = null
-    }
-    detail.uv = hit.uv ? hit.uv.toArray() : null
-  } else {
-    detail.point       = null
-    detail.localPoint  = null
-    detail.normal      = null
-    detail.localNormal = null
-    detail.distance    = null
-    detail.uv          = null
-  }
-
-  return detail
 }
 
 // ── Node SOM event handlers ────────────────────────────────────────────────
@@ -440,29 +357,6 @@ function onNodeMouseUp(node) {
   if (!dragState || dragState.node !== node) return
   dragState = null
 }
-
-// ── Canvas DOM → SOM dispatch ──────────────────────────────────────────────
-
-canvas.addEventListener('mousemove', (e) => {
-  const result = hitTest(e)
-  client.dispatchPointerEvent(result?.node ?? null, 'pointermove', buildDetail(e, result))
-})
-
-canvas.addEventListener('mousedown', (e) => {
-  const result = hitTest(e)
-  if (result) {
-    client.dispatchPointerEvent(result.node, 'pointerdown', buildDetail(e, result))
-    if (client.hasPointerCapture) {
-      e.stopPropagation()   // suppress nav drag while a node has pointer capture
-    }
-  }
-  // TODO Session 34: click-to-deselect on empty-space mousedown
-})
-
-canvas.addEventListener('mouseup', (e) => {
-  const result = hitTest(e)
-  client.dispatchPointerEvent(result?.node ?? null, 'pointerup', buildDetail(e, result))
-})
 
 // ---------------------------------------------------------------------------
 // Connection state UI

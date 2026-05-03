@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Atrium — Pointer Playground</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #111;
+    color: #e2e8f0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .toolbar {
+    background: #1e1e1e;
+    border-bottom: 1px solid #333;
+    padding: 7px 14px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .toolbar h1 {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #a78bfa;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .demo-hints {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    color: #64748b;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+  }
+
+  .demo-hints .hint {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .hint-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .hint-dot.rollover  { background: #f59e0b; }
+  .hint-dot.toggle    { background: #22c55e; }
+  .hint-dot.drag      { background: #60a5fa; }
+
+  button {
+    background: #2d2d2d;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #e2e8f0;
+    padding: 5px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  button:hover { background: #3a3a3a; }
+
+  #status {
+    font-size: 11px;
+    color: #64748b;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    margin-left: auto;
+  }
+
+  #viewport {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: #0a0a0a;
+  }
+
+  #viewport canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  #legend {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    background: rgba(0,0,0,0.6);
+    color: #e2e8f0;
+    font-size: 11px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    padding: 8px 12px;
+    border-radius: 6px;
+    pointer-events: none;
+    line-height: 2;
+  }
+
+  #legend .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+</style>
+
+<!-- Import map -->
+<script type="importmap">
+{
+  "imports": {
+    "three":                            "https://esm.sh/three@0.163.0",
+    "three/addons/":                    "https://esm.sh/three@0.163.0/addons/",
+    "@gltf-transform/core":             "https://esm.sh/@gltf-transform/core@4.3.0",
+    "@gltf-transform/extensions":       "https://esm.sh/@gltf-transform/extensions@4.3.0",
+    "@gltf-transform/view":             "https://esm.sh/@gltf-transform/view@4.3.0?deps=three@0.163.0,@gltf-transform/core@4.3.0",
+    "@atrium/som":                      "../../packages/som/src/index.js",
+    "@atrium/protocol":                 "../../packages/protocol/src/index.js",
+    "@atrium/client":                   "../../packages/client/src/AtriumClient.js",
+    "@atrium/renderer-three":           "../../packages/renderer-three/src/index.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<div class="toolbar">
+  <h1>POINTER PLAYGROUND</h1>
+  <div class="demo-hints">
+    <div class="hint"><span class="hint-dot rollover"></span>crate-01: hover highlights</div>
+    <div class="hint"><span class="hint-dot toggle"></span>lamp-01: click toggles visibility</div>
+    <div class="hint"><span class="hint-dot drag"></span>any node: click to select, drag to move</div>
+  </div>
+  <button id="resetBtn">Reset</button>
+  <div id="status">Loading…</div>
+</div>
+
+<div id="viewport">
+  <div id="legend">
+    <div class="row"><span class="hint-dot rollover"></span>Hover rollover node</div>
+    <div class="row"><span class="hint-dot toggle"></span>Click toggle-visibility node</div>
+    <div class="row"><span class="hint-dot drag"></span>Click-select, then drag to translate</div>
+  </div>
+</div>
+
+<script type="module" src="src/app.js"></script>
+</body>
+</html>

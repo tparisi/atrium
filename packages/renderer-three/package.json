@@ -1,0 +1,23 @@
+{
+  "name": "@atrium/renderer-three",
+  "version": "0.1.0",
+  "description": "Three.js renderer bridge for Atrium — pointer input, hit-testing, drag math.",
+  "license": "MIT",
+  "author": "Tony Parisi / Metatron Studio",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "peerDependencies": {
+    "three": "^0.163.0",
+    "@atrium/client": "workspace:*",
+    "@atrium/som": "workspace:*"
+  },
+  "devDependencies": {
+    "three": "^0.163.0"
+  }
+}
