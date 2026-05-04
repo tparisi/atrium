@@ -52,6 +52,17 @@ messages, the client validates server messages.
 Protocol fields have sensible defaults. Extensions are opt-in. Future
 capability is reserved with escape hatches rather than locked out.
 
+**Renderer-neutral core.** `@atrium/client` has no `window`, no `document`,
+no Three.js — portable across browser UI, headless tests, and bot clients.
+Renderer-specific glue lives in its own package. The bridge pattern is the
+single seam where renderer, DOM, and client meet. Future non-Three
+renderers consume the same client API.
+
+**Interaction as policy, not mechanism.** Selection rules, drag conventions,
+gestures — these are policy decisions that vary by application. They live
+in `@atrium/interaction`, separate from the client and renderer packages,
+which expose only mechanism. Apps compose policy over mechanism.
+
 **No throwaway code.** Every line written is tested against the real
 implementation. No fake stubs, no mock world state. Tests run against the
 actual glTF-Transform Document, the actual WebSocket server, the actual
@@ -59,8 +70,8 @@ protocol schemas.
 
 **Incremental correctness.** Each layer is fully working and tested before
 the next is built on top of it. Session lifecycle before world state. World
-state before presence. Presence before rendering. You can always run what
-exists.
+state before presence. Presence before rendering. Mechanism before policy.
+You can always run what exists.
 
 ---
 
@@ -77,16 +88,19 @@ what it finds, whether or not a world server is present.
 WebSocket protocol for multiplayer world state. Clients connect, mutate the
 shared scene graph via `send`/`add`/`remove`, and receive authoritative
 updates as `set` broadcasts. Presence is tracked via `join` and `leave`.
+Newly connecting clients receive the full current world via `som-dump`.
 The full protocol is defined in JSON Schema in `@atrium/protocol`.
 
 **The runtime layer** is the Atrium server and client, built on top of SOM
 — the Scene Object Model. SOM is a DOM-inspired API layer over
 glTF-Transform: it wraps the live Document and exposes nodes, meshes,
-cameras, materials, and animations through typed accessors and a
-`setPath()` deep-mutation primitive. The server owns the authoritative
-scene graph via SOM; the client mirrors it and feeds it into Three.js
-through DocumentView. Both sides speak the same API — the same code that
-mutates a node on the server mutates a node in the client renderer.
+cameras, materials, and animations through typed accessors, fires mutation
+events, and provides a `setPath()` deep-mutation primitive. The server owns
+the authoritative scene graph via SOM; the client mirrors it and feeds it
+into Three.js through DocumentView. Both sides speak the same API — the
+same code that mutates a node on the server mutates a node in the client
+renderer. SOM nodes also dispatch pointer events, providing a DOM-like
+interaction surface that's renderer-agnostic.
 
 ---
 
@@ -95,34 +109,40 @@ mutates a node on the server mutates a node in the client renderer.
 ```
 atrium/
 ├── packages/
-│   ├── protocol/        # SOP message schemas (JSON Schema) and Ajv validator
-│   ├── som/             # Scene Object Model — DOM-inspired API over glTF-Transform
-│   ├── server/          # WebSocket world server (Node.js + glTF-Transform)
-│   ├── client/          # AtriumClient — WebSocket lifecycle, SOP, SOM, avatar (no UI)
-│   └── gltf-extension/  # ATRIUM_world glTF extension definition [coming]
+│   ├── protocol/         # SOP message schemas (JSON Schema) + Ajv validator
+│   ├── som/              # Scene Object Model — DOM-inspired API over glTF-Transform
+│   ├── server/           # WebSocket world server (Node.js + glTF-Transform)
+│   ├── client/           # AtriumClient — protocol, SOM sync, pointer dispatch (no UI, no renderer)
+│   ├── renderer-three/   # Three.js glue — PointerInputBridge, drag-math, hit-test
+│   ├── interaction/      # User interaction policy — selection model, future drag UX & gestures
+│   └── gltf-extension/   # ATRIUM_world glTF extension definition [coming]
 ├── apps/
-│   └── client/          # Browser UI shell — Three.js viewport, first-person nav
+│   ├── client/           # Browser UI shell — Three.js viewport, navigation, avatars
+│   └── playground/       # Pointer-event test bench
 ├── tools/
-│   └── protocol-inspector/   # Single-file interactive protocol debugger
+│   ├── protocol-inspector/   # Single-file interactive protocol debugger
+│   └── som-inspector/        # Live SOM tree, property sheet, animations panel, viewport edit
 ├── tests/
-│   ├── client/          # Protocol-level test client and SOM inspector
-│   └── fixtures/
-│       └── space.gltf   # Minimal world fixture used by server tests
+│   ├── client/           # Legacy protocol-level test client
+│   └── fixtures/         # space, atrium, space-ext, space-anim, space-anim-autoplay
 └── docs/
-    └── sessions/        # Claude Code session briefs — the build history
+    └── sessions/         # Design briefs and session logs — the build history
 ```
 
-The repo ships with working server, protocol, SOM, and client packages, a test
-world fixture, a browser-based protocol inspector, and the Atrium browser app.
+The repo ships with working server, protocol, SOM, client, renderer, and
+interaction packages, a suite of test world fixtures, two browser-based
+debugging tools, the Atrium browser app, and a pointer-event playground.
 Tests cover protocol validation, session lifecycle, world state mutations,
-presence, the SOM API, and AtriumClient event lifecycle.
+presence, the SOM API and event system, AtriumClient lifecycle, animation
+playback, the Three.js bridge, and selection-root resolution.
 
-This is a foundation, not a finished product. The client renderer, the
-object type registry, avatar embodiment, physics, and persistence are all
-ahead. The architecture is designed to support them cleanly. We want a
-thousand flowers to bloom — if you want to build a client in a different
-renderer, implement SOP in another language, or extend the protocol,
-everything you need to understand the system is here.
+This is a foundation, not a finished product. Pointer-event bubbling, the
+networked interactivity extension, drag-UX polish, the object type
+registry, physics, and persistence are all ahead. The architecture is
+designed to support them cleanly. We want a thousand flowers to bloom — if
+you want to build a client in a different renderer, implement SOP in
+another language, or extend the protocol, everything you need to understand
+the system is here.
 
 ---
 
@@ -134,30 +154,47 @@ git clone https://github.com/tparisi/atrium.git
 cd atrium
 pnpm install
 
-# run all tests
-pnpm test
-
-# or run package tests individually
+# run package tests
 pnpm --filter @atrium/protocol test
 pnpm --filter @atrium/som test
-pnpm --filter @atrium/server test
+pnpm --filter @atrium/server test         # see note below
 pnpm --filter @atrium/client test
+pnpm --filter @atrium/renderer-three test
+pnpm --filter @atrium/interaction test
 
 # start a world server
 cd packages/server
 WORLD_PATH=../../tests/fixtures/space.gltf node src/index.js
+
+# or load a world via .atrium.json manifest
+WORLD_PATH=../../tests/fixtures/space-ext.atrium.json node src/index.js
 
 # open the Atrium browser app (static, no build step)
 open apps/client/index.html
 # → enter a .gltf URL, click Load to render statically
 # → enter ws://localhost:3000 and click Connect for multiplayer
 
-# open the protocol inspector (low-level SOP debugger)
+# open the SOM inspector — live tree, property sheet, viewport edit
+open tools/som-inspector/index.html
+
+# open the protocol inspector — low-level SOP debugger
 open tools/protocol-inspector/index.html
+
+# open the pointer playground
+open apps/playground/index.html
 ```
 
-The browser app loads any `.gltf` file and renders it. With a server running,
-click Connect to go multiplayer — move around and see other users' avatars.
+The browser app loads any `.gltf` file and renders it. With a server
+running, click Connect to go multiplayer — move around and see other
+users' avatars. The SOM Inspector lets you click nodes in the viewport,
+edit their properties live, and drag them around — mutations broadcast to
+all connected clients.
+
+> **Note on server tests.** Individual server test files run cleanly
+> (~38 tests across avatar, presence, world, session, external-refs).
+> The batched `pnpm --filter @atrium/server test` currently hangs because
+> `session.test.js` doesn't tear down its WebSocket port between files —
+> a small harness fix on the to-do list. Run files individually for now.
 
 ---
 
@@ -166,18 +203,27 @@ click Connect to go multiplayer — move around and see other users' avatars.
 | Layer | Status |
 |---|---|
 | Protocol schemas (`@atrium/protocol`) | ✅ Complete |
-| Server session lifecycle (`@atrium/server`) | ✅ Complete |
-| World state — glTF-Transform + send/set/add/remove | ✅ Complete |
-| Presence — join/leave | ✅ Complete |
+| Server session lifecycle, presence, world state (`@atrium/server`) | ✅ Complete |
 | SOM — Scene Object Model (`@atrium/som`) | ✅ Complete |
-| Avatar nodes — SOM lifecycle, connect/disconnect | ✅ Complete |
-| NavigationInfo — mode, speed, updateRate | ✅ Complete |
-| AtriumClient (`@atrium/client`) — WS lifecycle, SOM, avatar | ✅ Complete |
-| Browser app (`apps/client`) — Three.js viewport, first-person nav | ✅ Complete |
-| glTF extension (`@atrium/gltf-extension`) | 🔜 Upcoming |
-| User Object Extensions (`ATRIUM_user_object`) | 🔜 Upcoming |
-| Physics | 🔜 Upcoming |
-| Persistence | 🔜 Upcoming |
+| SOM mutation events + DOM-style listener API | ✅ Complete |
+| Global SOM namespace (`getObjectByName`) | ✅ Complete |
+| SOMAnimation — full playback state machine + `autoStart` | ✅ Complete |
+| AtriumClient (`@atrium/client`) — connection, SOM sync, animation lifecycle | ✅ Complete |
+| AtriumClient — pointer dispatch + capture + hover state | ✅ Complete |
+| External references (`extras.atrium.source`) | ✅ Complete |
+| `apps/client` — full UI, navigation, avatars, animation integration | ✅ Complete |
+| `apps/playground` — pointer test bench | ✅ Complete |
+| SOM Inspector — tree, property sheet, world info, animations panel | ✅ Complete |
+| SOM Inspector — click-to-select, drag-to-translate, live cross-client editing | ✅ Complete |
+| `@atrium/renderer-three` — PointerInputBridge, drag-math, hit-test | ✅ Complete |
+| `@atrium/interaction` — selection model + selection-root resolution | ✅ Complete |
+| Pointer event bubbling | 🔜 Session 36+ (design-first) |
+| Drag UX polish (camera-relative, axis-locked, visual feedback) | 🔜 Upcoming |
+| `ATRIUM_interactivity` — networked declarative interactivity | 🔜 Awaits bubbling |
+| `ATRIUM_world` glTF extension formalization | 🔜 Upcoming |
+| `ATRIUM_user_object` — User Object Extensions | 🔜 Upcoming (design open) |
+| Physics, collision | 🔜 Future |
+| Persistence | 🔜 Future |
 
 ---
 
