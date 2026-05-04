@@ -14,6 +14,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/client
 
+  apps/playground:
+    dependencies:
+      '@atrium/client':
+        specifier: workspace:*
+        version: link:../../packages/client
+      '@atrium/renderer-three':
+        specifier: workspace:*
+        version: link:../../packages/renderer-three
+
   packages/client:
     dependencies:
       '@atrium/protocol':
@@ -41,6 +50,12 @@ importers:
       '@gltf-transform/core':
         specifier: ^4.0.0
         version: 4.3.0
+
+  packages/interaction:
+    dependencies:
+      '@atrium/som':
+        specifier: workspace:*
+        version: link:../som
 
   packages/protocol:
     dependencies:

@@ -1,5 +1,5 @@
 # Project Atrium
-## 2026-05-03 · As of Session 34
+## 2026-05-03 · As of Session 35
 
 This document is the canonical project handoff. It supersedes
 `Project_Atrium_2026-04-17.md` (Sessions 1–31) and
@@ -59,6 +59,8 @@ atrium/
 │   ├── server/          # WebSocket world server
 │   ├── client/          # AtriumClient, AvatarController, NavigationController,
 │   │                    #   AnimationController, pointer dispatch + capture
+│   ├── interaction/     # User interaction policy (Session 35)
+│   │                    #   selection model; future: drag UX, gestures, multi-select
 │   ├── renderer-three/  # Three.js-specific glue (Session 34)
 │   │                    #   PointerInputBridge, drag-math, hit-test
 │   └── gltf-extension/  # ATRIUM_world glTF extension definition [coming]
@@ -91,23 +93,25 @@ atrium/
 
 ---
 
-## Test Counts (after Session 34)
+## Test Counts (after Session 35)
 
 | Package | Tests |
 |---------|-------|
 | `@atrium/protocol` | 46 |
 | `@atrium/som` | 109 |
-| `@atrium/server` | 32 (per April 17; **needs re-verification**) |
+| `@atrium/server` | ~38 (avatar 6 + presence 6 + world 9 + session 11 + external-refs 6, per Session 35 build log; full batch run blocked by `session.test.js` WebSocket port hang — harness fix needed) |
 | `@atrium/client` | 96 |
 | `@atrium/renderer-three` | 19 |
-| **Total** | **302** |
+| `@atrium/interaction` | 9 |
+| **Total** | **311** |
 
 Run with `pnpm --filter <package> test`.
 
-> **Action item:** server tests have not been re-run since Session 31.
-> Worth verifying the count is still 32 (with the same one pre-existing
-> flake) early in Session 35 or whichever session next touches the
-> server.
+> **Action item:** server tests don't run cleanly in batch mode —
+> `session.test.js` opens port 3001 and hangs `pnpm --filter
+> @atrium/server test`. Individual files run fine. Harness fix
+> (likely a teardown issue) is a small hygiene item for a future
+> session.
 
 > **Process note:** build logs occasionally misreport test counts
 > (Session 33 showed 18/18 when actual was 96). Future briefs should
@@ -208,7 +212,7 @@ listeners are present. Event detail is accessed via `event.detail`.
 type, detail)` which routes through `SOMObject._dispatchEvent`. Event
 types: `pointerover`, `pointerout`, `pointerdown`, `pointerup`,
 `pointermove`, `click`. Dispatch is currently leaf-only; bubbling is
-filed for Session 35+ design.
+filed for Session 36+ design.
 
 ### Global SOM Namespace (Session 27)
 
@@ -805,9 +809,12 @@ detail panel updates.
 ## Test Fixtures
 
 ### `space.gltf` — Minimal gray-box world
-Ground plane, crate, lamp with stand and shade. The lamp parent is the
-canonical case motivating bubbling — it has no mesh of its own; only
-its children (`lamp-shade`, `lamp-stand`) are hit-targets.
+Ground plane, crate, lamp with stand and shade. The lamp parent has
+no mesh of its own; only its children (`lamp-shade`, `lamp-stand`)
+are hit-targets. This is the canonical case motivating compound-object
+UX — handled by the selection model in Session 35; bubbling remains
+useful for hierarchical event handling (parent-receives-child-clicks)
+when that need surfaces.
 
 ### `atrium.gltf` — Session 21
 Procedurally generated circular gathering space. 56 nodes, 43 meshes,
@@ -876,10 +883,13 @@ External references test world. Paired with standalone `crate.gltf` and
 | **SOM Inspector — click-to-select + drag-to-translate** | **✅ Complete (Session 33)** |
 | SOM Inspector — live cross-client editing | ✅ Confirmed working |
 | **`packages/renderer-three/` — PointerInputBridge + drag-math** | **✅ Complete (Session 34)** |
+| **`@atrium/interaction` package launch** | **✅ Complete (Session 35)** |
+| **`@atrium/interaction` — selection model (`nearestNonMeshAncestor`, `leafOnly`, `resolveSelectionRoot`)** | **✅ Complete (Session 35)** |
+| **SOM Inspector + playground — selection-root resolution (Pattern C: heuristic + Alt-descend)** | **✅ Complete (Session 35)** |
 | Test fixtures — space, atrium, space-ext, space-anim, space-anim-autoplay | ✅ Complete |
 | External references (`extras.atrium.source`) | ✅ Complete (Session 24) |
 | External ref animations | 🔜 Phase 6 (deferred) |
-| **Pointer event bubbling** | **🔜 Session 35+ (design-first)** |
+| **Pointer event bubbling** | **🔜 Session 36+ (design-first)** |
 | **Networked interactivity (`ATRIUM_interactivity`)** | **🔜 Awaits bubbling** |
 | glTF extension (`ATRIUM_world`) | 🔜 Upcoming |
 | User Object Extensions (`ATRIUM_user_object`) | 🔜 Upcoming (design open) |
@@ -947,8 +957,13 @@ External references test world. Paired with standalone `crate.gltf` and
 - **Server `.atrium.json` startup tests missing** — manual testing only.
   (Session 26 gap)
 
-- **Server tests not re-verified since Session 31** — assumed still 32
-  with one pre-existing flake; should be confirmed.
+- **Server test harness — batch-mode hang** — `pnpm --filter
+  @atrium/server test` hangs because `session.test.js` opens a live
+  WebSocket server on port 3001 and the harness doesn't tear down
+  cleanly. Individual test files (avatar, presence, world, session,
+  external-refs) all pass when run separately, ~38 tests total.
+  Harness-level fix (likely teardown) is a small hygiene item.
+  (Confirmed Session 35.)
 
 ---
 
@@ -978,6 +993,11 @@ External references test world. Paired with standalone `crate.gltf` and
     (`packages/renderer-three/` for Three.js); the bridge pattern is the
     single seam where renderer + DOM + client meet. Future non-Three
     renderers consume the same client API. (Sessions 32–34.)
+13. **User interaction policy lives in `@atrium/interaction`.**
+    AtriumClient, SOM, and renderer packages do not encode interaction
+    conventions; they expose mechanism that interaction policies
+    compose over. Apps consume `@atrium/interaction` directly, not via
+    AtriumClient. (Session 35.)
 
 ---
 
@@ -1024,6 +1044,13 @@ make the handoff legible.
 - **Implementation deviations from the brief.** Evaluate whether
   they're genuine improvements or scope creep. Session 34's
   `sceneRoot` getter was a legitimate fix; not every deviation will be.
+- **Build logs surface canonical-doc updates the brief didn't
+  predict.** Session 35's update spec was authored before the build
+  log existed and didn't anticipate the server test situation
+  (closer to 38 tests, batch-mode hang) which the build log
+  revealed. After future build logs land, do a quick "what did we
+  learn that the update spec didn't predict?" pass before applying
+  canonical-doc updates.
 
 ### Patterns from the code itself
 
@@ -1067,8 +1094,12 @@ make the handoff legible.
 
 ### Highest impact
 
-- **Pointer event bubbling — DESIGN + IMPLEMENT.** First concrete need
-  surfaced (lamp parent). Open design questions:
+- **Pointer event bubbling — DESIGN + IMPLEMENT.** The lamp-style
+  compound-object UX is now handled at the selection layer (Session
+  35), so bubbling is no longer needed for that case. Bubbling remains
+  the right answer for genuine event-handler hierarchy — e.g., a
+  parent node that wants to react to clicks on any descendant
+  (highlight, sound, broadcast). Open design questions:
   `pointerover`/`pointerout` bubbling semantics, `target` vs
   `currentTarget` shape, propagation order, whether to inherit DOM's
   capture-phase (recommend: not), how `localPoint`/`localNormal` behave
@@ -1091,11 +1122,14 @@ make the handoff legible.
 - **Fixture loading paths consistent across apps.** Use
   `new URL('...', import.meta.url)` or server-root-relative paths.
 
-### Drag UX
+### Drag UX (next `@atrium/interaction` tenant candidate)
 
 - **Camera-relative drag.** Current world-space drag feels wrong when
   camera is rotated. Capture camera right/forward at mousedown,
-  transform screen-space cursor delta → world axes.
+  transform screen-space cursor delta → world axes. Renderer-neutral
+  portion of drag math is a candidate for migration from
+  `@atrium/renderer-three` into `@atrium/interaction` during this
+  work.
 - **Axis-locked drag** (modifier-key escapes for vertical / single-axis).
 - **Visual selection feedback in viewport.** Outline, bounding box, or
   tint.
@@ -1110,8 +1144,11 @@ make the handoff legible.
 - **AnimationMixer / AvatarController modular review.** Analysis pass
   before extraction. Currently duplicated across `apps/client` and
   `tools/som-inspector`. Not urgent — duplication is stable.
-- **Server tests re-verification.** Confirm 32 tests, 1 flake, no
-  regressions since Session 31.
+- **Server test harness — batch-mode fix.** `pnpm --filter
+  @atrium/server test` hangs because `session.test.js` doesn't tear
+  down its WebSocket server cleanly. Individual files all pass
+  (~38 tests total). Small hygiene item; pair with any session that
+  next touches the server.
 
 ### Larger work
 
@@ -1175,32 +1212,37 @@ make the handoff legible.
 
 ---
 
-## Suggested Session 35 framings
+## Suggested Session 36 framings
 
-A few options for what Session 35 could actually be:
+Now that the lamp UX is solved at the selection layer, the urgency
+profile of the remaining backlog has shifted. Bubbling is no longer
+chasing a concrete UX gap — it's chasing a real but more abstract
+need (parent handlers for hierarchical reactions, prerequisite for
+`ATRIUM_interactivity`).
 
-- **"Bubbling design" (small).** Just the design brief, no code.
-  Settle the open questions, hand off the brief to Session 36
-  implementation. *Recommended if you want to think carefully before
-  building.*
-- **"Pointer events polish" (small-medium).** Bundle the small fixes:
-  property sheet reactivity, fixture paths, debug flag for diagnostic
-  handlers, possibly click-to-deselect. Solid breather before tackling
-  bubbling. *Recommended if you want a cleanup pass.*
+A few options for Session 36:
+
 - **"Drag UX polish" (medium).** Camera-relative drag, axis-locked
-  drag with modifiers, visual selection feedback. Closes out drag
-  rough edges before bubbling makes selection more complex.
-  *Recommended if drag UX is a noticeable irritant.*
+  drag, visual selection feedback. Natural next `@atrium/interaction`
+  tenant; extends the package along its coherence criterion. Closes
+  out drag rough edges. *Recommended — high user-visible payoff,
+  validates the package's growth path.*
+- **"Pointer events polish" (small-medium).** Property sheet
+  reactivity during drag, fixture paths, debug flag for diagnostic
+  handlers, click-to-deselect. Solid cleanup. *Recommended if drag
+  UX feels too ambitious for one session.*
+- **"Bubbling design" (small).** Just the design brief, no code.
+  Settle the open questions, hand off the brief to a Session 37
+  implementation. *Recommended once a concrete bubbling use case
+  surfaces — currently the use case is `ATRIUM_interactivity`, which
+  is itself unstarted.*
 - **"Hit-test invisibility investigation" (small).** Run the
-  diagnostic, decide on fix shape, implement. Could pair with polish.
-  *Low effort, decent payoff for hygiene.*
-- **"Bubbling design + implementation" (medium-large).** Combined.
-  Risky — design might not survive implementation. *Don't recommend
-  without a design pass first.*
+  diagnostic from the May 2 backlog, decide on fix shape, implement.
+  Could pair with polish. *Low effort, decent payoff for hygiene.*
 
-Bubbling is the highest-impact item but also the riskiest if rushed. A
-polish session before bubbling would land small wins and surface
-anything else that's been bothering us. Either order is defensible.
+Drag UX is the strongest candidate — it has direct user-visible
+payoff, it validates `@atrium/interaction`'s growth, and it's properly
+scoped after a small breather session like Session 35.
 
 ---
 

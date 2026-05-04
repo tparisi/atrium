@@ -18,6 +18,7 @@ import * as THREE from 'three'
 import { DocumentView }       from '@gltf-transform/view'
 import { AtriumClient }       from '@atrium/client'
 import { PointerInputBridge, projectRayToPlane, computeParentInverse } from '@atrium/renderer-three'
+import { resolveSelectionRoot } from '@atrium/interaction'
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -134,7 +135,7 @@ function setRolloverHighlight(node, on) {
 // Toggle visibility — lamp-01
 // ---------------------------------------------------------------------------
 
-const TOGGLE_NODE = 'lamp-shade'
+const LAMP_ROOT   = 'lamp-01'   // non-mesh group parent; lamp children resolve to this
 let _hiddenNodes  = new Set()   // names of nodes hidden by click
 
 function toggleNodeVisibility(node) {
@@ -174,16 +175,17 @@ function setSelected(node) {
 }
 
 function onNodeMouseDown(node, e) {
-  if (selected !== node) return   // first click selects; second drag translates
-  const threeObj = sceneGroup?.getObjectByName(node.name)
+  const resolved = resolveSelectionRoot(node, { descend: e.detail?.altKey ?? false })
+  if (selected !== resolved) return   // first click selects; second drag translates
+  const threeObj = sceneGroup?.getObjectByName(resolved.name)
   if (!threeObj) return
   const worldPos   = threeObj.getWorldPosition(new THREE.Vector3())
   const planeY     = worldPos.y
   const initCursor = projectRayToPlane(e.detail.ray, planeY)
   if (!initCursor) return
-  client.setPointerCapture(node)
+  client.setPointerCapture(resolved)
   dragState = {
-    node,
+    node:                resolved,
     dragPlaneY:          planeY,
     initialCursorWorld:  initCursor,
     initialNodeWorldPos: worldPos.clone(),
@@ -229,13 +231,16 @@ client.on('world:loaded', ({ name }) => {
       node.addEventListener('pointerout',  () => setRolloverHighlight(node, false))
     }
 
-    // Click-toggle visibility — lamp-01 only
-    if (node.name === TOGGLE_NODE) {
-      node.addEventListener('click', () => toggleNodeVisibility(node))
+    // Click-toggle visibility — lamp parts only (resolves leaf → lamp-01 by default)
+    if (node.name === LAMP_ROOT || node.parent?.name === LAMP_ROOT) {
+      node.addEventListener('click', (e) => {
+        const resolved = resolveSelectionRoot(node, { descend: e.detail?.altKey ?? false })
+        toggleNodeVisibility(resolved)
+      })
     }
 
     // Click-to-select + drag-to-translate — all non-ephemeral nodes
-    node.addEventListener('click',       () => setSelected(node))
+    node.addEventListener('click',       (e) => setSelected(resolveSelectionRoot(node, { descend: e.detail?.altKey ?? false })))
     node.addEventListener('pointerdown', (e) => onNodeMouseDown(node, e))
     node.addEventListener('pointermove', (e) => onNodeMouseMove(node, e))
     node.addEventListener('pointerup',   () => onNodeMouseUp(node))

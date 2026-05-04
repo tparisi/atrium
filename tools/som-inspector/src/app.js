@@ -12,6 +12,7 @@ import { PropertySheet }         from './PropertySheet.js'
 import { WorldInfoPanel }        from './WorldInfoPanel.js'
 import { AnimationsPanel }       from './AnimationsPanel.js'
 import { PointerInputBridge, projectRayToPlane, computeParentInverse } from '@atrium/renderer-three'
+import { resolveSelectionRoot } from '@atrium/interaction'
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -307,8 +308,9 @@ function setSelected(somNode) {
 
 // ── Node SOM event handlers ────────────────────────────────────────────────
 
-function onNodeClick(node) {
-  setSelected(node)
+function onNodeClick(node, e) {
+  const resolved = resolveSelectionRoot(node, { descend: e.detail?.altKey ?? false })
+  setSelected(resolved)
 }
 
 /**
@@ -316,12 +318,12 @@ function onNodeClick(node) {
  * selected node. First click selects; second click + drag translates.
  */
 function onNodeMouseDown(node, e) {
-  if (selected !== node) return   // unselected node: click will select on pointerup
+  const resolved = resolveSelectionRoot(node, { descend: e.detail?.altKey ?? false })
+  if (selected !== resolved) return   // unselected node: click will select on pointerup
 
-  // Look up the Three.js Object3D corresponding to this SOM node so we can
-  // read its world-space transform. getObjectByName walks the scene graph once
-  // at drag-start — acceptable cost.
-  const threeObj = sceneGroup?.getObjectByName(node.name)
+  // Look up the Three.js Object3D for the resolved node (may be a mesh-less
+  // group like lamp-01) so we can read its world-space transform.
+  const threeObj = sceneGroup?.getObjectByName(resolved.name)
   if (!threeObj) return
 
   const worldPos   = threeObj.getWorldPosition(new THREE.Vector3())
@@ -330,10 +332,11 @@ function onNodeMouseDown(node, e) {
 
   if (!initCursor) return   // ray parallel to drag plane — skip
 
-  client.setPointerCapture(node)
+  // Capture on the resolved node so subsequent pointermove/pointerup route to it.
+  client.setPointerCapture(resolved)
 
   dragState = {
-    node,
+    node:                resolved,
     dragPlaneY:          planeY,
     initialCursorWorld:  initCursor,
     initialNodeWorldPos: worldPos.clone(),
@@ -415,7 +418,7 @@ client.on('world:loaded', ({ name }) => {
   // Attach selection and drag listeners to all non-ephemeral SOM nodes
   for (const node of client.som.nodes) {
     if (node.extras?.atrium?.ephemeral) continue
-    node.addEventListener('click',       () => onNodeClick(node))
+    node.addEventListener('click',       (e) => onNodeClick(node, e))
     node.addEventListener('pointerdown', (e) => onNodeMouseDown(node, e))
     node.addEventListener('pointermove', (e) => onNodeMouseMove(node, e))
     node.addEventListener('pointerup',   () => onNodeMouseUp(node))
