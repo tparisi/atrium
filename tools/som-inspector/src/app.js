@@ -2,7 +2,6 @@
 // Copyright (c) 2026 Tony Parisi / Metatron Studio. See LICENSE in repo root.
 
 import * as THREE from 'three'
-import { DocumentView } from '@gltf-transform/view'
 import { AtriumClient }          from '@atrium/client'
 import { AvatarController }      from '@atrium/client/AvatarController'
 import { NavigationController }  from '@atrium/client/NavigationController'
@@ -11,7 +10,7 @@ import { TreeView }              from './TreeView.js'
 import { PropertySheet }         from './PropertySheet.js'
 import { WorldInfoPanel }        from './WorldInfoPanel.js'
 import { AnimationsPanel }       from './AnimationsPanel.js'
-import { PointerInputBridge, projectRayToPlane, computeParentInverse } from '@atrium/renderer-three'
+import { PointerInputBridge, projectRayToPlane, computeParentInverse, initDocumentView, AnimationBridge, loadBackground } from '@atrium/renderer-three'
 import { resolveSelectionRoot } from '@atrium/interaction'
 
 // ---------------------------------------------------------------------------
@@ -68,101 +67,12 @@ const CAMERA_OFFSET_Y = 2.0
 const CAMERA_OFFSET_Z = 4.0
 
 // ---------------------------------------------------------------------------
-// DocumentView
+// DocumentView / animation state
 // ---------------------------------------------------------------------------
 
 let docView    = null
 let sceneGroup = null
-let mixer      = null   // THREE.AnimationMixer — recreated on world:loaded
-const clipMap  = new Map()  // animName → THREE.AnimationClip
-
-function initDocumentView(somDocument) {
-  if (docView) { docView.dispose(); threeScene.remove(sceneGroup) }
-  docView    = new DocumentView(renderer)
-  const sceneDef = somDocument.document.getRoot().listScenes()[0]
-  sceneGroup = docView.view(sceneDef)
-  threeScene.add(sceneGroup)
-}
-
-// ---------------------------------------------------------------------------
-// Animation helpers
-// ---------------------------------------------------------------------------
-
-function buildClipsFromSOM(somDocument) {
-  const clips = []
-  for (const gltfAnim of somDocument.document.getRoot().listAnimations()) {
-    const tracks = []
-    for (const channel of gltfAnim.listChannels()) {
-      const sampler    = channel.getSampler()
-      const targetNode = channel.getTargetNode()
-      const targetPath = channel.getTargetPath()
-      if (!sampler || !targetNode) continue
-      const times  = sampler.getInput()?.getArray()
-      const values = sampler.getOutput()?.getArray()
-      if (!times || !values) continue
-      const nodeName = targetNode.getName()
-      let track
-      if (targetPath === 'rotation') {
-        track = new THREE.QuaternionKeyframeTrack(`${nodeName}.quaternion`, times, values)
-      } else if (targetPath === 'translation') {
-        track = new THREE.VectorKeyframeTrack(`${nodeName}.position`, times, values)
-      } else if (targetPath === 'scale') {
-        track = new THREE.VectorKeyframeTrack(`${nodeName}.scale`, times, values)
-      }
-      if (track) tracks.push(track)
-    }
-    if (tracks.length > 0) {
-      clips.push(new THREE.AnimationClip(gltfAnim.getName(), -1, tracks))
-    }
-  }
-  return clips
-}
-
-function initAnimations() {
-  if (mixer) mixer.stopAllAction()
-  mixer = null
-  clipMap.clear()
-
-  if (!client.som) return
-
-  const clips = buildClipsFromSOM(client.som)
-  for (const clip of clips) clipMap.set(clip.name, clip)
-
-  if (clips.length > 0) {
-    mixer = new THREE.AnimationMixer(sceneGroup)
-    mixer.addEventListener('finished', ({ action }) => {
-      const clip = action.getClip()
-      const anim = client.som?.getAnimationByName(clip.name)
-      if (anim && anim.playing) anim.stop()
-    })
-    console.log(`[inspector] AnimationMixer ready — ${clips.length} clip(s): ${clips.map(c => c.name).join(', ')}`)
-  }
-}
-
-/**
- * Reconcile the Three.js mixer to the current SOM playing state.
- *
- * Called immediately after initAnimations() so that animations already
- * playing in the SOM (late-joiner som-dump, autoStart synchronous call,
- * or static load autoStart) are started in the mixer even if the
- * animation:play events fired before the mixer existed.
- */
-function replayPlayingAnimations(som) {
-  if (!mixer) return
-  for (const anim of som.animations) {
-    if (!anim.playing) continue
-    const clip = clipMap.get(anim.name)
-    if (!clip) { console.warn(`[inspector] replayPlayingAnimations — no clip for "${anim.name}"`); continue }
-    const pb     = anim.playback
-    const action = mixer.clipAction(clip)
-    action.loop              = pb.loop ? THREE.LoopRepeat : THREE.LoopOnce
-    action.clampWhenFinished = !pb.loop
-    action.timeScale         = pb.timeScale
-    action.reset().play()
-    action.time              = anim.currentTime   // seek to computed position
-    console.log(`[inspector] replayPlayingAnimations — started "${anim.name}" at t=${anim.currentTime.toFixed(2)}`)
-  }
-}
+let animBridge = null
 
 // ---------------------------------------------------------------------------
 // Resize
@@ -197,74 +107,11 @@ const nav = new NavigationController(avatar, {
 
 const animCtrl = new AnimationController(client)
 
-animCtrl.on('animation:play', ({ animation }) => {
-  if (!mixer) return
-  const clip = clipMap.get(animation.name)
-  if (!clip) { console.warn(`[inspector] animation:play — no clip for "${animation.name}"`); return }
-  const action = mixer.clipAction(clip)
-  action.loop              = animation.loop ? THREE.LoopRepeat : THREE.LoopOnce
-  action.clampWhenFinished = !animation.loop
-  action.timeScale         = animation.timeScale
-  action.reset().play()
-  action.time              = animation.currentTime
-})
-
-animCtrl.on('animation:pause', ({ animation }) => {
-  if (!mixer) return
-  const clip = clipMap.get(animation.name)
-  if (!clip) return
-  const action = mixer.existingAction(clip)
-  if (action) action.paused = true
-})
-
-animCtrl.on('animation:stop', ({ animation }) => {
-  if (!mixer) return
-  const clip = clipMap.get(animation.name)
-  if (!clip) return
-  const action = mixer.existingAction(clip)
-  if (action) action.stop()
-})
-
-animCtrl.on('animation:playback-changed', ({ animation, playback }) => {
-  if (!mixer) return
-  const clip = clipMap.get(animation.name)
-  if (!clip) return
-  const action = mixer.existingAction(clip)
-  if (!action) return
-  action.setLoop(playback.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity)
-  action.setEffectiveTimeScale(playback.timeScale)
-})
-
 // ---------------------------------------------------------------------------
-// Background loading
+// Background state
 // ---------------------------------------------------------------------------
 
 let worldBaseUrl = ''
-
-function loadBackground(bg, baseUrl) {
-  if (!bg?.texture) {
-    threeScene.background = null
-    threeScene.environment = null
-    return
-  }
-  if (bg.type && bg.type !== 'equirectangular') {
-    console.warn('Unsupported background type:', bg.type)
-    return
-  }
-  const textureUrl = new URL(bg.texture, baseUrl).href
-  const loader = new THREE.TextureLoader()
-  loader.load(
-    textureUrl,
-    (texture) => {
-      texture.mapping   = THREE.EquirectangularReflectionMapping
-      texture.colorSpace = THREE.SRGBColorSpace
-      threeScene.background  = texture
-      threeScene.environment = texture
-    },
-    undefined,
-    (err) => console.warn('Failed to load background texture:', textureUrl, err),
-  )
-}
 
 // ---------------------------------------------------------------------------
 // TreeView + PropertySheet + WorldInfoPanel
@@ -273,7 +120,7 @@ function loadBackground(bg, baseUrl) {
 const treeView = new TreeView(treePanelEl)
 const propSheet = new PropertySheet(propsPanelEl, propsHeaderEl)
 const worldInfo = new WorldInfoPanel(worldInfoEl, {
-  onBackgroundChange: (bg) => loadBackground(bg, worldBaseUrl),
+  onBackgroundChange: (bg) => loadBackground(threeScene, bg, worldBaseUrl),
 })
 const animationsPanel = new AnimationsPanel(animationsPanelEl)
 
@@ -403,17 +250,18 @@ client.on('world:loaded', ({ name }) => {
   selected  = null
   dragState = null
 
-  initDocumentView(client.som)
-  initAnimations()
-  replayPlayingAnimations(client.som)
+  ;({ docView, sceneGroup } = initDocumentView(renderer, threeScene, client.som, { prevDocView: docView, prevSceneGroup: sceneGroup }))
+  if (animBridge) animBridge.dispose()
+  animBridge = new AnimationBridge(sceneGroup, client, animCtrl)
+  animBridge.init(client.som)
+  animBridge.replayPlayingAnimations(client.som)
   treeView.build(client.som)
   propSheet.clear()
   worldInfo.show(client.som)
   animationsPanel.show(client.som, animCtrl)
   updateStatusBar(name ? `World: ${name}` : '')
 
-  // Load background via shared helper
-  loadBackground(client.som.extras?.atrium?.background, worldBaseUrl)
+  loadBackground(threeScene, client.som.extras?.atrium?.background, worldBaseUrl)
 
   // Attach selection and drag listeners to all non-ephemeral SOM nodes
   for (const node of client.som.nodes) {
@@ -464,7 +312,7 @@ client.on('som:set', ({ nodeName }) => {
   if (!client.som) return
   if (nodeName === '__document__') {
     worldInfo.refresh()
-    loadBackground(client.som.extras?.atrium?.background, worldBaseUrl)
+    loadBackground(threeScene, client.som.extras?.atrium?.background, worldBaseUrl)
     return
   }
   const selected = treeView.selectedNode
@@ -655,7 +503,7 @@ function tick(now) {
 
   nav.tick(dt)
   animCtrl.tick(dt)
-  if (mixer) mixer.update(dt)
+  if (animBridge) animBridge.update(dt)
 
   // Camera sync
   const localNode  = avatar.localNode

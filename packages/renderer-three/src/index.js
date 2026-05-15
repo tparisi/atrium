@@ -3,3 +3,7 @@
 
 export { PointerInputBridge } from './PointerInputBridge.js'
 export { projectRayToPlane, computeParentInverse } from './drag-math.js'
+export { buildClipsFromSOM } from './build-clips.js'
+export { initDocumentView } from './document-view.js'
+export { loadBackground } from './load-background.js'
+export { AnimationBridge } from './AnimationBridge.js'
