@@ -63,8 +63,9 @@ export class SOMDocument extends SOMObject {
     this._skinMap      = new Map()
     this._sceneMap     = new Map()
 
-    // Ordered array of all SOMLight wrappers — deduplicates the dual-key registration
-    this._lights = []
+    // Ordered arrays for node-attached cameras and lights — deduplicates dual-key registration
+    this._cameras = []
+    this._lights  = []
 
     // Map keyed by name — for fast O(1) node lookup
     this._nodesByName      = new Map()
@@ -132,6 +133,37 @@ export class SOMDocument extends SOMObject {
       if (c) somNode._camera = this._cameraMap.get(c) ?? null
       const sk = n.getSkin()
       if (sk) somNode._skin = this._skinMap.get(sk) ?? null
+    }
+
+    // Cameras — node-walk; must run after nodes so node names and _cameraMap are ready
+    for (const n of this._root.listNodes()) {
+      const gltfCamera = n.getCamera()
+      if (!gltfCamera) continue
+      const somNode = this._nodeMap.get(n)
+      if (!somNode) continue
+      const somCamera = this._cameraMap.get(gltfCamera)
+      if (!somCamera) continue
+
+      this._cameras.push(somCamera)
+
+      // Compute alias first — needed for collision warning
+      const alias = somNode.name + '.camera'
+
+      // Register under bare name if non-empty (may collide with host node — node wins)
+      const bareName = gltfCamera.getName?.() ?? null
+      if (bareName) {
+        if (this._objectsByName.has(bareName)) {
+          console.warn(
+            `SOM: duplicate name "${bareName}" — SOMNode wins bare-name slot; use "${alias}" to address this camera`
+          )
+        } else {
+          this._objectsByName.set(bareName, somCamera)
+        }
+      }
+
+      // Always register under qualified alias — stable regardless of collision
+      this._objectsByName.set(alias, somCamera)
+      somCamera._qualifiedName = alias
     }
 
     // Lights (KHR_lights_punctual) — node-walk; must run after nodes so node names are available
@@ -296,7 +328,7 @@ export class SOMDocument extends SOMObject {
   get nodes()      { return Array.from(this._nodesByName.values()) }
   get meshes()     { return Array.from(this._meshMap.values()) }
   get materials()  { return Array.from(this._materialMap.values()) }
-  get cameras()    { return Array.from(this._cameraMap.values()) }
+  get cameras()    { return [...this._cameras] }
   get animations() { return Array.from(this._animationMap.values()) }
   get lights()     { return [...this._lights] }
   get textures()   { return Array.from(this._textureMap.values()) }

@@ -516,6 +516,11 @@ export class AtriumClient extends EventEmitter {
       this._attachAnimationListeners(anim)
     }
 
+    // Camera-level mutations
+    for (const somCamera of this._som.cameras) {
+      this._attachCameraListeners(somCamera)
+    }
+
     // Light-level mutations
     for (const somLight of this._som.lights) {
       this._attachLightListeners(somLight)
@@ -567,13 +572,6 @@ export class AtriumClient extends EventEmitter {
       })
     }
 
-    const camera = node.camera
-    if (camera) {
-      camera.addEventListener('mutation', (event) => {
-        if (!event.detail.property) return
-        this._onLocalMutation(nodeName, `camera.${event.detail.property}`, event.detail.value)
-      })
-    }
   }
 
   /**
@@ -585,6 +583,20 @@ export class AtriumClient extends EventEmitter {
     const alias = somLight.qualifiedName
     if (!alias) return   // detached or unregistered light — skip
     somLight.addEventListener('mutation', (event) => {
+      if (this._applyingRemote) return
+      if (!event.detail.property) return
+      this._onLocalMutation(alias, event.detail.property, event.detail.value)
+    })
+  }
+
+  /**
+   * Attach a mutation listener to a single camera.
+   * Uses the qualified alias (e.g. "MainCamera.camera") as the wire node field.
+   */
+  _attachCameraListeners(somCamera) {
+    const alias = somCamera.qualifiedName
+    if (!alias) return   // detached or unregistered camera — skip
+    somCamera.addEventListener('mutation', (event) => {
       if (this._applyingRemote) return
       if (!event.detail.property) return
       this._onLocalMutation(alias, event.detail.property, event.detail.value)
