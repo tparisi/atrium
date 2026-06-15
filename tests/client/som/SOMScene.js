@@ -6,15 +6,20 @@ import { SOMEvent }  from './SOMEvent.js'
 import { SOMNode }   from './SOMNode.js'
 
 export class SOMScene extends SOMObject {
-  constructor(scene) {
+  constructor(scene, document = null) {
     super()
-    this._scene = scene
+    this._scene    = scene
+    this._document = document
   }
 
   get name()   { return this._scene.getName() }
   get extras() { return this._scene.getExtras() }
 
-  get children()    { return this._scene.listChildren().map(n => new SOMNode(n)) }
+  get children() {
+    return this._scene.listChildren().map(n =>
+      (this._document ? this._document._resolveNode(n) : null) ?? new SOMNode(n)
+    )
+  }
 
   addChild(node) {
     this._scene.addChild(node._node)

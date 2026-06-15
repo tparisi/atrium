@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import { resolve as resolvePath } from 'node:path'
 import { NodeIO } from '@gltf-transform/core'
+import { KHRLightsPunctual } from '@gltf-transform/extensions'
 import { SOMDocument } from '@atrium/som'
 
 /**
@@ -33,7 +34,7 @@ async function fetchBinary(url) {
 }
 
 export async function createWorld(gltfPath, { baseUrl } = {}) {
-  const io = new NodeIO()
+  const io = new NodeIO().registerExtensions([KHRLightsPunctual])
   const document = await io.read(gltfPath)
   const som = new SOMDocument(document)
 

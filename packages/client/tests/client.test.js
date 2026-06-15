@@ -7,10 +7,12 @@ import { fileURLToPath } from 'url'
 import { dirname, resolve } from 'path'
 import WebSocket from 'ws'
 import { Document } from '@gltf-transform/core'
+import { KHRLightsPunctual } from '@gltf-transform/extensions'
 import { createSessionServer } from '../../server/src/session.js'
 import { createWorld } from '../../server/src/world.js'
 import { AtriumClient } from '../src/AtriumClient.js'
 import { SOMDocument } from '../../som/src/SOMDocument.js'
+import { SOMLight }    from '../../som/src/SOMLight.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const FIXTURE_PATH = resolve(__dirname, '../../../tests/fixtures/space.gltf')
@@ -670,4 +672,111 @@ test('mutation-sync — non-avatar node mutation still produces send when avatar
   assert.ok(sendMsg,                                   'send emitted for non-avatar node')
   assert.equal(sendMsg.field, 'translation',           'correct field')
   assert.deepEqual(sendMsg.value, [5, 0, 0],           'correct value')
+})
+
+// ---------------------------------------------------------------------------
+// AtriumClient — light mutation dispatch
+// ---------------------------------------------------------------------------
+
+// Build a SOMDocument that includes a KHR_lights_punctual light so that
+// som.lights is populated and getObjectByName('Sun.light') resolves.
+function makeSOMDocumentWithLight() {
+  const doc  = new Document()
+  const ext  = doc.createExtension(KHRLightsPunctual)
+  const sunLight = ext.createLight('Sun')
+    .setType('directional').setColor([1.0, 0.98, 0.95]).setIntensity(3.0)
+  const lampLight = ext.createLight('LampGlow')
+    .setType('point').setColor([1.0, 0.9, 0.7]).setIntensity(10.0).setRange(5.0)
+  const sunNode  = doc.createNode('Sun').setExtension('KHR_lights_punctual', sunLight)
+  const lampNode = doc.createNode('LampGlow').setExtension('KHR_lights_punctual', lampLight)
+  doc.createScene('Scene').addChild(sunNode).addChild(lampNode)
+  return new SOMDocument(doc)
+}
+
+// Wire a client with a light-bearing SOM.
+function makeWiredLightClient() {
+  let mock
+  const client = new AtriumClient({
+    WebSocket: class { constructor() { mock = new MockWebSocket(); return mock } },
+  })
+  client.connect('ws://mock')
+  client._sessionId   = 'session-aabbccdd-0000-0000-0000-000000000010'
+  client._displayName = 'User-light'
+  client._connected   = true
+  client._som         = makeSOMDocumentWithLight()
+  client._attachMutationListeners()
+  mock.sent.length = 0   // clear connect-phase messages
+  return { client, mock }
+}
+
+test('light mutation — sends set message with qualified alias as node field', () => {
+  const { client, mock } = makeWiredLightClient()
+  const light = client.som.getObjectByName('Sun.light')
+  light.intensity = 0.5
+
+  const sendMsg = mock.sent.find(m => m.type === 'send')
+  assert.ok(sendMsg,                               'send message emitted')
+  assert.equal(sendMsg.node,  'Sun.light',         'node is qualified alias')
+  assert.equal(sendMsg.field, 'intensity',         'correct field')
+  assert.equal(sendMsg.value, 0.5,                 'correct value')
+})
+
+test('light mutation — does not fire outbound send while _applyingRemote', async () => {
+  const { client, mock } = makeWiredLightClient()
+
+  // Simulate an inbound remote set for the light — _onSet sets _applyingRemote=true during apply
+  mock.simulateMessage({
+    type: 'set', seq: 1,
+    node: 'Sun.light', field: 'intensity', value: 0.2,
+    serverTime: Date.now(),
+    session: 'other-session-id',
+  })
+  await new Promise(r => setImmediate(r))
+
+  // The light should be updated
+  const light = client.som.getObjectByName('Sun.light')
+  assert.equal(light.intensity, 0.2, 'light intensity updated from inbound set')
+
+  // No outbound send should have been generated (no echo loop)
+  const sends = mock.sent.filter(m => m.type === 'send')
+  assert.equal(sends.length, 0, 'no outbound send emitted during remote apply')
+})
+
+test('light mutation — color mutation sends plain array value', () => {
+  const { client, mock } = makeWiredLightClient()
+  const light = client.som.getObjectByName('LampGlow.light')
+  light.color = [1.0, 0.0, 0.0]
+
+  const sendMsg = mock.sent.find(m => m.type === 'send' && m.node === 'LampGlow.light')
+  assert.ok(sendMsg,                               'send message emitted for color')
+  assert.equal(sendMsg.field, 'color',             'correct field')
+  assert.deepEqual(Array.from(sendMsg.value), [1.0, 0.0, 0.0], 'value is plain [r,g,b] array')
+})
+
+test('light mutation — range null sends null value', () => {
+  const { client, mock } = makeWiredLightClient()
+  const light = client.som.getObjectByName('LampGlow.light')
+  light.range = null
+
+  const sendMsg = mock.sent.find(m => m.type === 'send' && m.node === 'LampGlow.light')
+  assert.ok(sendMsg,                               'send message emitted for range')
+  assert.equal(sendMsg.field, 'range',             'correct field')
+  assert.strictEqual(sendMsg.value, null,          'value is null (not 0 or undefined)')
+})
+
+test('light mutation — light with null qualifiedName is skipped silently', () => {
+  const { client, mock } = makeWiredLightClient()
+
+  // Build a bare SOMLight with no qualifiedName (detached — not registered in _objectsByName)
+  const doc = new Document()
+  const ext = doc.createExtension(KHRLightsPunctual)
+  const gltfLight = ext.createLight('Orphan').setType('point').setIntensity(1)
+  const orphan = new SOMLight(gltfLight)
+  // _qualifiedName remains null (not set by _buildObjectGraph)
+
+  client._attachLightListeners(orphan)   // should return early — no listener added
+
+  orphan.intensity = 99   // mutate — should produce no send
+  const sends = mock.sent.filter(m => m.type === 'send')
+  assert.equal(sends.length, 0, 'no send emitted for light with null qualifiedName')
 })

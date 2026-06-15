@@ -6,17 +6,19 @@ import { SOMEvent }   from './SOMEvent.js'
 import { SOMMaterial } from './SOMMaterial.js'
 
 export class SOMPrimitive extends SOMObject {
-  constructor(primitive) {
+  constructor(primitive, document = null) {
     super()
     this._primitive = primitive
+    this._document  = document
     this._material  = undefined   // wired by SOMDocument; undefined = not yet cached
   }
 
-  // Return cached material if wired by SOMDocument, else create on demand
+  // Return cached material if wired by SOMDocument, else resolve through document
   get material() {
     if (this._material !== undefined) return this._material
     const m = this._primitive.getMaterial()
-    return m ? new SOMMaterial(m) : null
+    if (!m) return null
+    return (this._document ? this._document._resolveMaterial(m) : null) ?? new SOMMaterial(m)
   }
   set material(v) {
     this._material = v ?? null

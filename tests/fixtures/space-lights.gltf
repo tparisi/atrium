@@ -1,0 +1,429 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.3.0",
+    "version": "2.0"
+  },
+  "extras": {
+    "atrium": {
+      "name": "Space",
+      "description": "A minimal gray-box test world.",
+      "author": "Project Atrium",
+      "navigation": {
+        "mode": [
+          "WALK",
+          "FLY",
+          "ORBIT",
+          "TELEPORT"
+        ],
+        "terrainFollowing": true,
+        "speed": {
+          "default": 1.4,
+          "min": 0.5,
+          "max": 5
+        },
+        "collision": {
+          "enabled": false
+        },
+        "updateRate": {
+          "positionInterval": 1000,
+          "maxViewRate": 20
+        }
+      }
+    }
+  },
+  "accessors": [
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 24,
+      "max": [
+        5,
+        0.02500000037252903,
+        5
+      ],
+      "min": [
+        -5,
+        -0.02500000037252903,
+        -5
+      ],
+      "bufferView": 0,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 24,
+      "bufferView": 0,
+      "byteOffset": 12
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 36,
+      "bufferView": 1,
+      "byteOffset": 0
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 36,
+      "bufferView": 1,
+      "byteOffset": 72
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 192,
+      "bufferView": 1,
+      "byteOffset": 144
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 144,
+      "bufferView": 1,
+      "byteOffset": 528
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 24,
+      "max": [
+        0.25,
+        0.25,
+        0.25
+      ],
+      "min": [
+        -0.25,
+        -0.25,
+        -0.25
+      ],
+      "bufferView": 2,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 24,
+      "bufferView": 2,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 100,
+      "max": [
+        0.05000000074505806,
+        0.75,
+        0.05000000074505806
+      ],
+      "min": [
+        -0.05000000074505806,
+        -0.75,
+        -0.05000000074505806
+      ],
+      "bufferView": 3,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 100,
+      "bufferView": 3,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 82,
+      "max": [
+        0.30000001192092896,
+        0.20000000298023224,
+        0.30000001192092896
+      ],
+      "min": [
+        -0.30000001192092896,
+        -0.20000000298023224,
+        -0.30000001192092896
+      ],
+      "bufferView": 4,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 82,
+      "bufferView": 4,
+      "byteOffset": 12
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 576,
+      "byteStride": 24,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 576,
+      "byteLength": 816,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1392,
+      "byteLength": 576,
+      "byteStride": 24,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1968,
+      "byteLength": 2400,
+      "byteStride": 24,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 4368,
+      "byteLength": 1968,
+      "byteStride": 24,
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "space-lights.bin",
+      "byteLength": 6336
+    }
+  ],
+  "materials": [
+    {
+      "name": "mat-ground",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.5,
+          0.5,
+          0.5,
+          1
+        ],
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "mat-crate",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.6,
+          0.35,
+          0.1,
+          1
+        ],
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "mat-stand",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.2,
+          0.2,
+          0.2,
+          1
+        ],
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "mat-shade",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.9,
+          0.85,
+          0.6,
+          1
+        ],
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "mesh-ground",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 2
+        }
+      ]
+    },
+    {
+      "name": "mesh-crate",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 6,
+            "NORMAL": 7
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 3
+        }
+      ]
+    },
+    {
+      "name": "mesh-stand",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 8,
+            "NORMAL": 9
+          },
+          "mode": 4,
+          "material": 2,
+          "indices": 4
+        }
+      ]
+    },
+    {
+      "name": "mesh-shade",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 10,
+            "NORMAL": 11
+          },
+          "mode": 4,
+          "material": 3,
+          "indices": 5
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "ground-plane",
+      "mesh": 0
+    },
+    {
+      "name": "crate-01",
+      "translation": [
+        1,
+        0.25,
+        0
+      ],
+      "mesh": 1
+    },
+    {
+      "name": "lamp-01",
+      "translation": [
+        3,
+        0,
+        0
+      ],
+      "children": [
+        3,
+        4
+      ]
+    },
+    {
+      "name": "lamp-stand",
+      "translation": [
+        0,
+        0.75,
+        0
+      ],
+      "mesh": 2
+    },
+    {
+      "name": "lamp-shade",
+      "translation": [
+        0,
+        1.6,
+        0
+      ],
+      "mesh": 3
+    },
+    {
+      "name": "Sun",
+      "translation": [
+        5,
+        5,
+        5
+      ],
+      "rotation": [
+        0.3826834323650898,
+        0,
+        0,
+        0.9238795325112867
+      ],
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 0
+        }
+      }
+    },
+    {
+      "name": "LampGlow",
+      "translation": [
+        3,
+        1.6,
+        0
+      ],
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 1
+        }
+      }
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0,
+        1,
+        2,
+        5,
+        6
+      ]
+    }
+  ],
+  "extensionsUsed": [
+    "KHR_lights_punctual"
+  ],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [
+        {
+          "type": "directional",
+          "color": [
+            1,
+            0.98,
+            0.95
+          ],
+          "intensity": 3,
+          "name": "Sun"
+        },
+        {
+          "type": "point",
+          "color": [
+            1,
+            0.9,
+            0.7
+          ],
+          "intensity": 10,
+          "range": 5,
+          "name": "LampGlow"
+        }
+      ]
+    }
+  }
+}

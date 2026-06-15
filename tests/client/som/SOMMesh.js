@@ -6,10 +6,11 @@ import { SOMEvent }     from './SOMEvent.js'
 import { SOMPrimitive } from './SOMPrimitive.js'
 
 export class SOMMesh extends SOMObject {
-  constructor(mesh) {
+  constructor(mesh, document = null) {
     super()
-    this._mesh  = mesh
-    this._prims = undefined   // wired by SOMDocument; undefined = not yet cached
+    this._mesh     = mesh
+    this._document = document
+    this._prims    = undefined   // wired by SOMDocument; undefined = not yet cached
   }
 
   get name()    { return this._mesh.getName() }
@@ -34,10 +35,12 @@ export class SOMMesh extends SOMObject {
     }
   }
 
-  // Return cached primitives if wired by SOMDocument, else create on demand
+  // Return cached primitives if wired by SOMDocument, else resolve through document
   get primitives() {
     if (this._prims !== undefined) return this._prims
-    return this._mesh.listPrimitives().map(p => new SOMPrimitive(p))
+    return this._mesh.listPrimitives().map(p =>
+      (this._document ? this._document._resolvePrimitive(p) : null) ?? new SOMPrimitive(p)
+    )
   }
 
   addPrimitive(primitive) {

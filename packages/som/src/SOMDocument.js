@@ -41,6 +41,7 @@ import { SOMPrimitive } from './SOMPrimitive.js'
 import { SOMMaterial }  from './SOMMaterial.js'
 import { SOMCamera }    from './SOMCamera.js'
 import { SOMAnimation } from './SOMAnimation.js'
+import { SOMLight }     from './SOMLight.js'
 import { SOMTexture }   from './SOMTexture.js'
 import { SOMSkin }      from './SOMSkin.js'
 
@@ -57,9 +58,13 @@ export class SOMDocument extends SOMObject {
     this._nodeMap      = new Map()
     this._primitiveMap = new Map()
     this._animationMap = new Map()
+    this._lightMap     = new Map()   // gltf-Transform Light → SOMLight
     this._textureMap   = new Map()
     this._skinMap      = new Map()
     this._sceneMap     = new Map()
+
+    // Ordered array of all SOMLight wrappers — deduplicates the dual-key registration
+    this._lights = []
 
     // Map keyed by name — for fast O(1) node lookup
     this._nodesByName      = new Map()
@@ -127,6 +132,38 @@ export class SOMDocument extends SOMObject {
       if (c) somNode._camera = this._cameraMap.get(c) ?? null
       const sk = n.getSkin()
       if (sk) somNode._skin = this._skinMap.get(sk) ?? null
+    }
+
+    // Lights (KHR_lights_punctual) — node-walk; must run after nodes so node names are available
+    for (const n of this._root.listNodes()) {
+      const gltfLight = n.getExtension('KHR_lights_punctual')
+      if (!gltfLight) continue
+      const somNode = this._nodeMap.get(n)
+      if (!somNode) continue
+
+      const somLight = new SOMLight(gltfLight)
+      this._lightMap.set(gltfLight, somLight)
+      this._lights.push(somLight)
+      somNode._light = somLight
+
+      // Compute alias first — needed for the collision warning
+      const alias = somNode.name + '.light'
+
+      // Register under bare name if non-empty (may collide with host node — node wins)
+      const bareName = gltfLight.getName?.() ?? null
+      if (bareName) {
+        if (this._objectsByName.has(bareName)) {
+          console.warn(
+            `SOM: duplicate name "${bareName}" — SOMNode wins bare-name slot; use "${alias}" to address this light`
+          )
+        } else {
+          this._objectsByName.set(bareName, somLight)
+        }
+      }
+
+      // Always register under qualified alias — stable regardless of collision
+      this._objectsByName.set(alias, somLight)
+      somLight._qualifiedName = alias
     }
 
     // Animations — register in _animationsByName + _objectsByName (with collision check)
@@ -261,6 +298,7 @@ export class SOMDocument extends SOMObject {
   get materials()  { return Array.from(this._materialMap.values()) }
   get cameras()    { return Array.from(this._cameraMap.values()) }
   get animations() { return Array.from(this._animationMap.values()) }
+  get lights()     { return [...this._lights] }
   get textures()   { return Array.from(this._textureMap.values()) }
   get skins()      { return Array.from(this._skinMap.values()) }
 

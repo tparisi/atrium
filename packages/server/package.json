@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@gltf-transform/core": "^4.0.0",
+    "@gltf-transform/extensions": "^4.3.0",
     "@atrium/protocol": "workspace:*",
     "@atrium/som": "workspace:*",
     "@atrium/gltf-extension": "workspace:*",

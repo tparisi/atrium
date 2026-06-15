@@ -385,6 +385,94 @@ describe('set with playback value containing autoStart', () => {
   })
 })
 
+// ─── set — light fields ───────────────────────────────────────────
+// The `value` field in set.json is `{}` (open schema — accepts any JSON value).
+// No value-range enforcement exists today; range checking is a future protocol enhancement.
+// These tests confirm that valid light-property values are accepted by the validator.
+
+describe('set message — light fields', () => {
+  it('valid set — light intensity (number)', () => {
+    const { valid } = validate('server', {
+      type: 'set', seq: 20,
+      node: 'Sun.light', field: 'intensity',
+      value: 3.0, serverTime: Date.now(),
+    })
+    assert.equal(valid, true)
+  })
+
+  it('valid set — light color (3-element array)', () => {
+    const { valid } = validate('server', {
+      type: 'set', seq: 21,
+      node: 'Sun.light', field: 'color',
+      value: [1.0, 0.98, 0.95], serverTime: Date.now(),
+    })
+    assert.equal(valid, true)
+  })
+
+  it('valid set — light type (directional)', () => {
+    const { valid } = validate('server', {
+      type: 'set', seq: 22,
+      node: 'Sun.light', field: 'type',
+      value: 'directional', serverTime: Date.now(),
+    })
+    assert.equal(valid, true)
+  })
+
+  it('valid set — light type (point)', () => {
+    const { valid } = validate('server', {
+      type: 'set', seq: 23,
+      node: 'LampGlow.light', field: 'type',
+      value: 'point', serverTime: Date.now(),
+    })
+    assert.equal(valid, true)
+  })
+
+  it('valid set — light type (spot)', () => {
+    const { valid } = validate('server', {
+      type: 'set', seq: 24,
+      node: 'Spot.light', field: 'type',
+      value: 'spot', serverTime: Date.now(),
+    })
+    assert.equal(valid, true)
+  })
+
+  it('valid set — light range (positive number)', () => {
+    const { valid } = validate('server', {
+      type: 'set', seq: 25,
+      node: 'LampGlow.light', field: 'range',
+      value: 5.0, serverTime: Date.now(),
+    })
+    assert.equal(valid, true)
+  })
+
+  it('valid set — light range (null — infinite range)', () => {
+    const { valid } = validate('server', {
+      type: 'set', seq: 26,
+      node: 'LampGlow.light', field: 'range',
+      value: null, serverTime: Date.now(),
+    })
+    assert.equal(valid, true)
+  })
+
+  it('valid set — node field is dotted name Sun.light', () => {
+    const { valid } = validate('server', {
+      type: 'set', seq: 27,
+      node: 'Sun.light', field: 'intensity',
+      value: 1.5, serverTime: Date.now(),
+    })
+    assert.equal(valid, true)
+  })
+
+  it('valid set — node field is dotted name MainCamera.camera (forward-compat)', () => {
+    const { valid } = validate('server', {
+      type: 'set', seq: 28,
+      node: 'MainCamera.camera', field: 'type',
+      value: 'perspective', serverTime: Date.now(),
+    })
+    assert.equal(valid, true)
+  })
+})
+
 // ─── unknown message ──────────────────────────────────────────────
 
 describe('unknown message type', () => {

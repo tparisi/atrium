@@ -515,6 +515,11 @@ export class AtriumClient extends EventEmitter {
     for (const anim of this._som.animations) {
       this._attachAnimationListeners(anim)
     }
+
+    // Light-level mutations
+    for (const somLight of this._som.lights) {
+      this._attachLightListeners(somLight)
+    }
   }
 
   /**
@@ -569,6 +574,21 @@ export class AtriumClient extends EventEmitter {
         this._onLocalMutation(nodeName, `camera.${event.detail.property}`, event.detail.value)
       })
     }
+  }
+
+  /**
+   * Attach a mutation listener to a single light.
+   * Uses the qualified alias (e.g. "Sun.light") as the wire node field so the
+   * server's getObjectByName always resolves to the SOMLight, not the host node.
+   */
+  _attachLightListeners(somLight) {
+    const alias = somLight.qualifiedName
+    if (!alias) return   // detached or unregistered light — skip
+    somLight.addEventListener('mutation', (event) => {
+      if (this._applyingRemote) return
+      if (!event.detail.property) return
+      this._onLocalMutation(alias, event.detail.property, event.detail.value)
+    })
   }
 
   /**

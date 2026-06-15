@@ -15,6 +15,7 @@ export class SOMNode extends SOMObject {
     this._mesh     = undefined   // wired by SOMDocument; undefined = not yet cached
     this._camera   = undefined
     this._skin     = undefined
+    this._light    = undefined
   }
 
   // Identity
@@ -101,6 +102,11 @@ export class SOMNode extends SOMObject {
     const s = this._node.getSkin()
     if (!s) return null
     return (this._document ? this._document._resolveSkin(s) : null) ?? new SOMSkin(s)
+  }
+
+  get light() {
+    if (this._light !== undefined) return this._light
+    return null
   }
 
   // Scene graph
