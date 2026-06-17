@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Tony Parisi / Metatron Studio. See LICENSE in repo root.
 
-import * as THREE from 'three'
 import { AtriumClient }          from '@atrium/client'
 import { LabelOverlay }          from './LabelOverlay.js'
-import { Stage, PointerInputBridge, initDocumentView, loadBackground } from '@atrium/renderer-three'
+import { Stage, PointerInputBridge, initDocumentView, loadBackground, buildAvatarDescriptor } from '@atrium/renderer-three'
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -74,39 +73,6 @@ onResize()
 
 let docView    = null
 let sceneGroup = null
-
-// ---------------------------------------------------------------------------
-// Avatar capsule descriptor (sent to server via AtriumClient)
-// ---------------------------------------------------------------------------
-
-function buildAvatarDescriptor(name) {
-  const geo       = new THREE.CapsuleGeometry(0.3, 0.8, 4, 8)
-  const positions = Array.from(geo.attributes.position.array)
-  const normals   = Array.from(geo.attributes.normal.array)
-  const indices   = Array.from(geo.index.array)
-  geo.dispose()
-
-  const color = [Math.random() * 0.5 + 0.5, Math.random() * 0.5 + 0.5, Math.random() * 0.5 + 0.5, 1]
-
-  return {
-//    name,
-    translation: [0, 0.7, 0],
-    extras: { displayName: name },
-    mesh: {
-      primitives: [{
-        attributes: { POSITION: positions, NORMAL: normals },
-        indices,
-        material: {
-          pbrMetallicRoughness: {
-            baseColorFactor: color,
-            metallicFactor:  0.0,
-            roughnessFactor: 0.7,
-          },
-        },
-      }],
-    },
-  }
-}
 
 // ---------------------------------------------------------------------------
 // HUD
