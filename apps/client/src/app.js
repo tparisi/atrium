@@ -3,11 +3,8 @@
 
 import * as THREE from 'three'
 import { AtriumClient }          from '@atrium/client'
-import { AvatarController }      from '@atrium/client/AvatarController'
-import { NavigationController }  from '@atrium/client/NavigationController'
-import { AnimationController }   from '@atrium/client/AnimationController'
 import { LabelOverlay }          from './LabelOverlay.js'
-import { PointerInputBridge, initDocumentView, AnimationBridge, loadBackground } from '@atrium/renderer-three'
+import { Stage, PointerInputBridge, initDocumentView, loadBackground } from '@atrium/renderer-three'
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -27,43 +24,30 @@ const hudHintEl     = document.getElementById('hud-hint')
 const modeSwitcher  = document.getElementById('mode-switcher')
 
 // ---------------------------------------------------------------------------
-// Three.js renderer / scene
+// Third-person camera constants (passed to Stage and used for V-key toggle)
 // ---------------------------------------------------------------------------
 
-const renderer = new THREE.WebGLRenderer({ antialias: true })
-renderer.setPixelRatio(window.devicePixelRatio)
-renderer.shadowMap.enabled = true
-viewportEl.appendChild(renderer.domElement)
-
-// Make the canvas focusable so keyboard events are scoped to the viewport
-const canvas = renderer.domElement
-canvas.setAttribute('tabindex', '0')
-canvas.style.outline = 'none'
-canvas.addEventListener('pointerdown', () => canvas.focus())
-
-const threeScene = new THREE.Scene()
-threeScene.background = new THREE.Color(0x1a1a2e)
-
-// Ambient + directional light
-threeScene.add(new THREE.AmbientLight(0xffffff, 0.6))
-const sun = new THREE.DirectionalLight(0xffffff, 1.2)
-sun.position.set(5, 10, 5)
-sun.castShadow = true
-threeScene.add(sun)
-
-// Grid helper
-threeScene.add(new THREE.GridHelper(40, 40, 0x333333, 0x222222))
-
-// Camera
-const camera = new THREE.PerspectiveCamera(70, 1, 0.01, 1000)
-camera.position.set(0, 1.6, 4)
+const CAMERA_OFFSET_Y = 2.0
+const CAMERA_OFFSET_Z = 4.0
 
 // ---------------------------------------------------------------------------
-// Third-person camera constants
+// Client + Stage
 // ---------------------------------------------------------------------------
 
-const CAMERA_OFFSET_Y = 2.0   // meters above avatar
-const CAMERA_OFFSET_Z = 4.0   // meters behind avatar (+Z = behind in glTF right-handed)
+const client = new AtriumClient({ debug: false })
+window.atriumClient = client   // expose for manual console testing
+
+const stage = new Stage(viewportEl, {
+  client,
+  cameraOffsetY:   CAMERA_OFFSET_Y,
+  cameraOffsetZ:   CAMERA_OFFSET_Z,
+  backgroundColor: 0x1a1a2e,
+  cameraPosition:  [0, 1.6, 4],
+})
+const { renderer, nav, animCtrl } = stage
+const { scene: threeScene, camera } = stage
+const avatar = stage.avatar
+const canvas  = renderer.domElement
 
 // ---------------------------------------------------------------------------
 // Navigation / camera mode state
@@ -78,13 +62,8 @@ let firstPerson    = false   // default: third-person when connected; V key togg
 
 const labels = new LabelOverlay(viewportEl, camera)
 
-// Resize handler
 function onResize() {
-  const w = viewportEl.clientWidth
-  const h = viewportEl.clientHeight
-  renderer.setSize(w, h, false)
-  camera.aspect = w / h
-  camera.updateProjectionMatrix()
+  stage.resize(viewportEl.clientWidth, viewportEl.clientHeight)
 }
 window.addEventListener('resize', onResize)
 onResize()
@@ -95,7 +74,6 @@ onResize()
 
 let docView    = null
 let sceneGroup = null
-let animBridge = null
 
 // ---------------------------------------------------------------------------
 // Avatar capsule descriptor (sent to server via AtriumClient)
@@ -184,25 +162,6 @@ function setConnectionState(state) {
 }
 
 // ---------------------------------------------------------------------------
-// AtriumClient + AvatarController + NavigationController
-// ---------------------------------------------------------------------------
-
-const client = new AtriumClient({ debug: false })
-window.atriumClient = client   // expose for manual console testing
-
-const avatar = new AvatarController(client, {
-  cameraOffsetY: CAMERA_OFFSET_Y,
-  cameraOffsetZ: CAMERA_OFFSET_Z,
-})
-
-const nav = new NavigationController(avatar, {
-  mode:             'WALK',
-  mouseSensitivity: 0.002,
-})
-
-const animCtrl = new AnimationController(client)
-
-// ---------------------------------------------------------------------------
 // Pointer input — PointerInputBridge
 // ---------------------------------------------------------------------------
 
@@ -232,10 +191,7 @@ client.on('world:loaded', ({ name, description, author }) => {
   threeScene.environment = null
 
   ;({ docView, sceneGroup } = initDocumentView(renderer, threeScene, client.som, { prevDocView: docView, prevSceneGroup: sceneGroup }))
-  if (animBridge) animBridge.dispose()
-  animBridge = new AnimationBridge(sceneGroup, client, animCtrl)
-  animBridge.init(client.som)
-  animBridge.replayPlayingAnimations(client.som)
+  stage.setSceneGroup(sceneGroup)
 
   loadBackground(threeScene, client.som.extras?.atrium?.background, worldBaseUrl)
 
@@ -527,59 +483,8 @@ function tick(now) {
   const dt = (now - lastTick) / 1000
   lastTick = now
 
-  // NavigationController updates SOM nodes and calls avatar.setView
-  nav.tick(dt)
-
-  // AnimationController drives timeupdate events; bridge advances playhead
-  animCtrl.tick(dt)
-  if (animBridge) animBridge.update(dt)
-
-  // Sync Three.js camera from SOM state (stays in app.js)
-  const localNode  = avatar.localNode
-  const cameraNode = avatar.cameraNode
-  if (localNode && cameraNode) {
-    if (nav.mode === 'ORBIT') {
-      // ORBIT: position from node (set by NavigationController), look at target
-      const pos = localNode.translation ?? [0, 0, 0]
-      camera.position.set(pos[0], pos[1], pos[2])
-      const t = nav.orbitTarget
-      camera.lookAt(t[0], t[1], t[2])
-    } else {
-      const yaw   = nav.yaw
-      const pitch = nav.pitch
-      const qYaw   = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
-      const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch)
-      const avatarPos = localNode.translation ?? [0, 0, 0]
-      const camOffset = cameraNode.translation ?? [0, 0, 0]
-      // Only Z offset means "behind the avatar" (third-person).
-      // First-person at eye height has Y but no Z — check Z only.
-      const hasOffset = Math.abs(camOffset[2]) > 0.001
-
-      if (hasOffset) {
-        // Third-person: offset camera behind and above avatar, look at avatar head
-        const offset = new THREE.Vector3(0, CAMERA_OFFSET_Y, CAMERA_OFFSET_Z)
-        offset.applyQuaternion(qYaw)
-        camera.position.set(
-          avatarPos[0] + offset.x,
-          avatarPos[1] + offset.y,
-          avatarPos[2] + offset.z,
-        )
-        const lookTarget = new THREE.Vector3(avatarPos[0], avatarPos[1] + 1.0, avatarPos[2])
-        camera.lookAt(lookTarget)
-        camera.rotateX(pitch)
-      } else {
-        // First-person: camera at avatar position (with Y eye height), direct yaw+pitch
-        camera.position.set(avatarPos[0], avatarPos[1], avatarPos[2])
-        camera.quaternion.copy(qYaw).multiply(qPitch)
-      }
-    }
-  }
-
-  // Update peer labels after camera sync so projections use current frame position
+  stage.tick(dt)
   labels.update()
-
-  // if (docView) docView.render()
-  renderer.render(threeScene, camera)
 }
 
 requestAnimationFrame(tick)

@@ -3,14 +3,11 @@
 
 import * as THREE from 'three'
 import { AtriumClient }          from '@atrium/client'
-import { AvatarController }      from '@atrium/client/AvatarController'
-import { NavigationController }  from '@atrium/client/NavigationController'
-import { AnimationController }   from '@atrium/client/AnimationController'
 import { TreeView }              from './TreeView.js'
 import { PropertySheet }         from './PropertySheet.js'
 import { WorldInfoPanel }        from './WorldInfoPanel.js'
 import { AnimationsPanel }       from './AnimationsPanel.js'
-import { PointerInputBridge, projectRayToPlane, computeParentInverse, initDocumentView, AnimationBridge, loadBackground } from '@atrium/renderer-three'
+import { Stage, PointerInputBridge, projectRayToPlane, computeParentInverse, initDocumentView, loadBackground } from '@atrium/renderer-three'
 import { resolveSelectionRoot } from '@atrium/interaction'
 
 // ---------------------------------------------------------------------------
@@ -32,39 +29,21 @@ const worldInfoEl      = document.getElementById('world-info')
 const animationsPanelEl = document.getElementById('animations-panel')
 
 // ---------------------------------------------------------------------------
-// Three.js renderer / scene
+// Client + Stage
 // ---------------------------------------------------------------------------
 
-const renderer = new THREE.WebGLRenderer({ antialias: true })
-renderer.setPixelRatio(window.devicePixelRatio)
-renderer.shadowMap.enabled = true
-viewportEl.appendChild(renderer.domElement)
+const client = new AtriumClient({ debug: false })
+window.atriumClient = client   // expose for console debugging
 
-// Make the canvas focusable so keyboard events are scoped to the viewport
-const canvas = renderer.domElement
-canvas.setAttribute('tabindex', '0')
-canvas.style.outline = 'none'
-canvas.addEventListener('pointerdown', () => canvas.focus())
-
-const threeScene = new THREE.Scene()
-threeScene.background = new THREE.Color(0x111111)
-
-threeScene.add(new THREE.AmbientLight(0xffffff, 0.6))
-const sun = new THREE.DirectionalLight(0xffffff, 1.2)
-sun.position.set(5, 10, 5)
-sun.castShadow = true
-threeScene.add(sun)
-threeScene.add(new THREE.GridHelper(40, 40, 0x1e293b, 0x0f172a))
-
-const camera = new THREE.PerspectiveCamera(70, 1, 0.01, 1000)
-camera.position.set(0, 5, 10)
-
-// ---------------------------------------------------------------------------
-// Third-person camera constants (used when switching to WALK mode)
-// ---------------------------------------------------------------------------
-
-const CAMERA_OFFSET_Y = 2.0
-const CAMERA_OFFSET_Z = 4.0
+const stage = new Stage(viewportEl, {
+  client,
+  navMode:          'ORBIT',
+  navMouseSensitivity: 0.005,
+})
+const { renderer, nav, animCtrl } = stage
+const { scene: threeScene, camera } = stage
+const avatar = stage.avatar
+const canvas  = renderer.domElement
 
 // ---------------------------------------------------------------------------
 // DocumentView / animation state
@@ -72,40 +51,16 @@ const CAMERA_OFFSET_Z = 4.0
 
 let docView    = null
 let sceneGroup = null
-let animBridge = null
 
 // ---------------------------------------------------------------------------
 // Resize
 // ---------------------------------------------------------------------------
 
 function onResize() {
-  const w = viewportEl.clientWidth
-  const h = viewportEl.clientHeight
-  renderer.setSize(w, h, false)
-  camera.aspect = w / h
-  camera.updateProjectionMatrix()
+  stage.resize(viewportEl.clientWidth, viewportEl.clientHeight)
 }
 window.addEventListener('resize', onResize)
 onResize()
-
-// ---------------------------------------------------------------------------
-// AtriumClient / AvatarController / NavigationController
-// ---------------------------------------------------------------------------
-
-const client = new AtriumClient({ debug: false })
-window.atriumClient = client   // expose for console debugging
-
-const avatar = new AvatarController(client, {
-  cameraOffsetY: CAMERA_OFFSET_Y,
-  cameraOffsetZ: CAMERA_OFFSET_Z,
-})
-
-const nav = new NavigationController(avatar, {
-  mode:             'ORBIT',
-  mouseSensitivity: 0.005,
-})
-
-const animCtrl = new AnimationController(client)
 
 // ---------------------------------------------------------------------------
 // Background state
@@ -251,10 +206,7 @@ client.on('world:loaded', ({ name }) => {
   dragState = null
 
   ;({ docView, sceneGroup } = initDocumentView(renderer, threeScene, client.som, { prevDocView: docView, prevSceneGroup: sceneGroup }))
-  if (animBridge) animBridge.dispose()
-  animBridge = new AnimationBridge(sceneGroup, client, animCtrl)
-  animBridge.init(client.som)
-  animBridge.replayPlayingAnimations(client.som)
+  stage.setSceneGroup(sceneGroup)
   treeView.build(client.som)
   propSheet.clear()
   worldInfo.show(client.som)
@@ -501,48 +453,7 @@ function tick(now) {
   const dt = (now - lastTick) / 1000
   lastTick = now
 
-  nav.tick(dt)
-  animCtrl.tick(dt)
-  if (animBridge) animBridge.update(dt)
-
-  // Camera sync
-  const localNode  = avatar.localNode
-  const cameraNode = avatar.cameraNode
-  if (localNode && cameraNode) {
-    if (nav.mode === 'ORBIT') {
-      const pos = localNode.translation ?? [0, 0, 0]
-      camera.position.set(pos[0], pos[1], pos[2])
-      const t = nav.orbitTarget
-      camera.lookAt(t[0], t[1], t[2])
-    } else {
-      // WALK / FLY — reuse standard third/first-person sync
-      const yaw    = nav.yaw
-      const pitch  = nav.pitch
-      const qYaw   = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
-      const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch)
-      const avatarPos = localNode.translation ?? [0, 0, 0]
-      const camOffset = cameraNode.translation ?? [0, 0, 0]
-      const hasOffset = Math.abs(camOffset[2]) > 0.001
-
-      if (hasOffset) {
-        const offset = new THREE.Vector3(0, CAMERA_OFFSET_Y, CAMERA_OFFSET_Z)
-        offset.applyQuaternion(qYaw)
-        camera.position.set(
-          avatarPos[0] + offset.x,
-          avatarPos[1] + offset.y,
-          avatarPos[2] + offset.z,
-        )
-        const lookTarget = new THREE.Vector3(avatarPos[0], avatarPos[1] + 1.0, avatarPos[2])
-        camera.lookAt(lookTarget)
-        camera.rotateX(pitch)
-      } else {
-        camera.position.set(avatarPos[0], avatarPos[1], avatarPos[2])
-        camera.quaternion.copy(qYaw).multiply(qPitch)
-      }
-    }
-  }
-
-  renderer.render(threeScene, camera)
+  stage.tick(dt)
 }
 
 requestAnimationFrame(tick)

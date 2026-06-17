@@ -17,7 +17,7 @@
 import * as THREE from 'three'
 import { DocumentView }       from '@gltf-transform/view'
 import { AtriumClient }       from '@atrium/client'
-import { PointerInputBridge, projectRayToPlane, computeParentInverse } from '@atrium/renderer-three'
+import { Stage, PointerInputBridge, projectRayToPlane, computeParentInverse } from '@atrium/renderer-three'
 import { resolveSelectionRoot } from '@atrium/interaction'
 
 // ---------------------------------------------------------------------------
@@ -29,40 +29,22 @@ const statusEl   = document.getElementById('status')
 const resetBtn   = document.getElementById('resetBtn')
 
 // ---------------------------------------------------------------------------
-// Three.js scene
+// Stage — fixed camera, no nav/anim controllers
 // ---------------------------------------------------------------------------
 
-const renderer = new THREE.WebGLRenderer({ antialias: true })
-renderer.setPixelRatio(window.devicePixelRatio)
-renderer.shadowMap.enabled = true
-viewportEl.appendChild(renderer.domElement)
-
+const stage = new Stage(viewportEl, {
+  nav:           false,
+  animCtrl:      false,
+  animBridge:    false,
+  cameraFov:     60,
+  cameraPosition: [0, 6, 10],
+})
+const { renderer, scene: threeScene, camera } = stage
 const canvas = renderer.domElement
-canvas.setAttribute('tabindex', '0')
-canvas.style.outline = 'none'
-canvas.addEventListener('pointerdown', () => canvas.focus())
-
-const threeScene = new THREE.Scene()
-threeScene.background = new THREE.Color(0x111111)
-
-threeScene.add(new THREE.AmbientLight(0xffffff, 0.6))
-const sun = new THREE.DirectionalLight(0xffffff, 1.2)
-sun.position.set(5, 10, 5)
-sun.castShadow = true
-threeScene.add(sun)
-threeScene.add(new THREE.GridHelper(40, 40, 0x1e293b, 0x0f172a))
-
-// Fixed camera — no nav controller (validates suppressOnCapture: false)
-const camera = new THREE.PerspectiveCamera(60, 1, 0.01, 1000)
-camera.position.set(0, 6, 10)
-camera.lookAt(0, 0, 0)
+stage.camera.lookAt(0, 0, 0)
 
 function onResize() {
-  const w = viewportEl.clientWidth
-  const h = viewportEl.clientHeight
-  renderer.setSize(w, h, false)
-  camera.aspect = w / h
-  camera.updateProjectionMatrix()
+  stage.resize(viewportEl.clientWidth, viewportEl.clientHeight)
 }
 window.addEventListener('resize', onResize)
 onResize()
@@ -263,7 +245,7 @@ client.loadWorld(new URL('../../../tests/fixtures/space.gltf', import.meta.url).
 
 function tick() {
   requestAnimationFrame(tick)
-  renderer.render(threeScene, camera)
+  stage.tick(0)
 }
 
 requestAnimationFrame(tick)
