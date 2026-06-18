@@ -87,6 +87,9 @@ export class Stage {
     // ── Camera ───────────────────────────────────────────────────────────────
     this._camera = new THREE.PerspectiveCamera(cameraFov, 1, cameraNear, cameraFar)
     this._camera.position.set(cameraPosition[0], cameraPosition[1], cameraPosition[2])
+    this._cameraFov  = cameraFov
+    this._cameraNear = cameraNear
+    this._cameraFar  = cameraFar
 
     // ── Controllers ──────────────────────────────────────────────────────────
     this._client          = client
@@ -96,6 +99,7 @@ export class Stage {
     this._animBridge      = null
     this._wantAnimBridge  = animBridge
     this._AnimBridgeCtor  = _AnimBridgeCtor
+    this._sceneGroup      = null
 
     if (client) {
       this._avatar = new _AvatarCtor(client, { cameraOffsetY, cameraOffsetZ })
@@ -135,6 +139,7 @@ export class Stage {
    * @param {THREE.Object3D} sceneGroup  - returned by initDocumentView
    */
   setSceneGroup(sceneGroup) {
+    this._sceneGroup = sceneGroup
     if (!this._wantAnimBridge || !this._animCtrl) return
 
     if (this._animBridge) this._animBridge.dispose()
@@ -144,6 +149,73 @@ export class Stage {
       this._animBridge.init(this._client.som)
       this._animBridge.replayPlayingAnimations(this._client.som)
     }
+  }
+
+  /**
+   * Activate a SOMCamera, seeding nav state from its authored world transform
+   * and performing a one-time lens copy into this._camera. Pass null to revert
+   * to the default perspective camera.
+   *
+   * @param {SOMCamera|null} somCamera
+   */
+  setActiveCamera(somCamera) {
+    if (!this._nav) return
+
+    if (!somCamera) {
+      if (!(this._camera instanceof THREE.PerspectiveCamera)) {
+        this._camera = new THREE.PerspectiveCamera(this._cameraFov, 1, this._cameraNear, this._cameraFar)
+      }
+      this._nav.activeCamera = null
+      return
+    }
+
+    const hostNode = somCamera.node
+    if (!hostNode || !this._sceneGroup) return
+    const threeObj = this._sceneGroup.getObjectByName(hostNode.name)
+    if (!threeObj) return
+
+    // Extract world transform
+    const worldPos  = new THREE.Vector3()
+    const worldQuat = new THREE.Quaternion()
+    threeObj.getWorldPosition(worldPos)
+    threeObj.getWorldQuaternion(worldQuat)
+
+    // Seed nav yaw/pitch from world orientation (YXZ Euler = yaw then pitch)
+    const euler = new THREE.Euler().setFromQuaternion(worldQuat, 'YXZ')
+    this._nav.yaw   = euler.y
+    this._nav.pitch = euler.x
+
+    if (this._nav.mode === 'ORBIT') {
+      const ORBIT_DIST = 5
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(worldQuat)
+      this._nav.orbitTarget = [
+        worldPos.x + forward.x * ORBIT_DIST,
+        worldPos.y + forward.y * ORBIT_DIST,
+        worldPos.z + forward.z * ORBIT_DIST,
+      ]
+      this._nav._orbitRadius    = ORBIT_DIST
+      this._nav._orbitAzimuth   = euler.y
+      this._nav._orbitElevation = -euler.x
+    }
+
+    // One-time lens copy
+    if (somCamera.type === 'perspective') {
+      if (!(this._camera instanceof THREE.PerspectiveCamera)) {
+        this._camera = new THREE.PerspectiveCamera(1, 1, 0.01, 1000)
+      }
+      this._camera.fov  = (somCamera.yfov * 180) / Math.PI
+      this._camera.near = somCamera.znear
+      this._camera.far  = somCamera.zfar
+      this._camera.updateProjectionMatrix()
+    } else {
+      const hx = (somCamera.xmag ?? 1) / 2
+      const hy = (somCamera.ymag ?? 1) / 2
+      this._camera = new THREE.OrthographicCamera(
+        -hx, hx, hy, -hy, somCamera.znear, somCamera.zfar
+      )
+    }
+
+    this._nav.activeCamera = somCamera
   }
 
   /**

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // NavigationController.js — keyboard/mouse driven navigation; no Three.js dependency
 
+import { SOMEvent } from '@atrium/som'
+
 function yawQuat(yaw)    { return [0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2)] }
 function pitchQuat(p)    { return [Math.sin(p / 2), 0, 0, Math.cos(p / 2)] }
 function forwardVec(yaw) { return [-Math.sin(yaw), 0, -Math.cos(yaw)] }
@@ -23,6 +25,9 @@ export class NavigationController {
     this._orbitAzimuth   = 0
     this._orbitElevation = 0.3
 
+    this._activeCamera = null
+    this._listeners    = {}
+
     avatar.on('avatar:local-ready', () => this._readNavInfo())
   }
 
@@ -32,12 +37,20 @@ export class NavigationController {
 
   get mode()  { return this._mode }
   get yaw()   { return this._yaw }
+  set yaw(v)  { this._yaw = v }
   get pitch() { return this._pitch }
+  set pitch(v){ this._pitch = v }
 
   get orbitTarget()    { return this._orbitTarget }
   set orbitTarget(v)   { this._orbitTarget = v }
   get orbitRadius()    { return this._orbitRadius }
   set orbitRadius(v)   { this._orbitRadius = v }
+
+  get activeCamera()  { return this._activeCamera }
+  set activeCamera(somCamera) {
+    this._activeCamera = somCamera ?? null
+    this._dispatchEvent(new SOMEvent('camerachange', { camera: this._activeCamera }))
+  }
 
   // ---------------------------------------------------------------------------
   // Input
@@ -157,6 +170,10 @@ export class NavigationController {
   // ---------------------------------------------------------------------------
   // Private
   // ---------------------------------------------------------------------------
+
+  _dispatchEvent(event) {
+    for (const cb of this._listeners[event.type] ?? []) cb(event)
+  }
 
   _initOrbitFromCurrentPosition() {
     const pos    = this._avatar.localNode?.translation ?? [0, 0, 0]

@@ -164,6 +164,7 @@ export class SOMDocument extends SOMObject {
       // Always register under qualified alias — stable regardless of collision
       this._objectsByName.set(alias, somCamera)
       somCamera._qualifiedName = alias
+      somCamera._hostNode      = somNode
     }
 
     // Lights (KHR_lights_punctual) — node-walk; must run after nodes so node names are available

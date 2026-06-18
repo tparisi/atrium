@@ -9,9 +9,11 @@ export class SOMCamera extends SOMObject {
     super()
     this._camera = camera
     this._qualifiedName = null   // set by SOMDocument._buildObjectGraph
+    this._hostNode      = null   // set by SOMDocument._buildObjectGraph
   }
 
   get qualifiedName() { return this._qualifiedName }
+  get node()          { return this._hostNode }
 
   get name()        { return this._camera.getName() }
   set name(v)       {

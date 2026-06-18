@@ -47,6 +47,7 @@ const { renderer, nav, animCtrl } = stage
 const { scene: threeScene, camera } = stage
 const avatar = stage.avatar
 const canvas  = renderer.domElement
+window.stage = stage
 
 // ---------------------------------------------------------------------------
 // Navigation / camera mode state
@@ -88,8 +89,11 @@ function updateHud() {
 }
 
 function updateHintText() {
+  const activeCam = nav.activeCamera
+  const camSuffix = activeCam ? ` · 🎥 ${activeCam.name}` : ''
+
   if (nav.mode === 'ORBIT') {
-    hudHintEl.textContent = 'Drag to orbit · Scroll to zoom'
+    hudHintEl.textContent = `Drag to orbit · Scroll to zoom${camSuffix}`
     return
   }
 
@@ -99,9 +103,9 @@ function updateHintText() {
 
   if (hasAvatar) {
     const cameraToggle = firstPerson ? '[V] third person' : '[V] first person'
-    hudHintEl.textContent = `${mouseMode} · WASD to move · ${mouseToggle} · ${cameraToggle}`
+    hudHintEl.textContent = `${mouseMode} · WASD to move · ${mouseToggle} · ${cameraToggle}${camSuffix}`
   } else {
-    hudHintEl.textContent = `${mouseMode} · WASD to move · ${mouseToggle}`
+    hudHintEl.textContent = `${mouseMode} · WASD to move · ${mouseToggle}${camSuffix}`
   }
 }
 
@@ -418,6 +422,18 @@ document.addEventListener('keydown', (e) => {
       avatar.cameraNode.translation = [0, CAMERA_OFFSET_Y, CAMERA_OFFSET_Z]
       avatar.localNode.visible = true
     }
+    updateHintText()
+    return
+  }
+
+  // Space — cycle through world cameras (null = default nav camera)
+  if (e.code === 'Space') {
+    const cameras = client.som?.cameras ?? []
+    if (cameras.length === 0) return
+    const current = nav.activeCamera
+    const idx = cameras.indexOf(current)
+    const next = cameras[(idx + 1) % (cameras.length + 1)]
+    stage.setActiveCamera(next ?? null)
     updateHintText()
     return
   }
