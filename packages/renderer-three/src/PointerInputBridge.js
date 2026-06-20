@@ -49,7 +49,8 @@ export class PointerInputBridge {
   constructor({ client, canvas, camera, sceneRoot, resolveSOMNode, suppressOnCapture = true }) {
     this._client  = client
     this._canvas  = canvas
-    this._camera  = camera
+    // Accept a getter function so callers can pass () => stage.camera for a live read
+    this._getCamera = typeof camera === 'function' ? camera : () => camera
     this._suppressOnCapture = suppressOnCapture
 
     this._raycaster = new THREE.Raycaster()
@@ -95,7 +96,7 @@ export class PointerInputBridge {
     const rect = this._canvas.getBoundingClientRect()
     this._ndc.x =  ((domEvent.clientX - rect.left) / rect.width)  * 2 - 1
     this._ndc.y = -((domEvent.clientY - rect.top)  / rect.height) * 2 + 1
-    this._raycaster.setFromCamera(this._ndc, this._camera)
+    this._raycaster.setFromCamera(this._ndc, this._getCamera())
     const root = this._getSceneRoot()
     if (!root || !this._client.som) return null
     const hits = this._raycaster.intersectObject(root, true)

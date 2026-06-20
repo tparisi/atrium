@@ -43,8 +43,7 @@ const stage = new Stage(viewportEl, {
   backgroundColor: 0x1a1a2e,
   cameraPosition:  [0, 1.6, 4],
 })
-const { renderer, nav, animCtrl } = stage
-const { scene: threeScene, camera } = stage
+const { renderer, nav, animCtrl, scene: threeScene } = stage
 const avatar = stage.avatar
 const canvas  = renderer.domElement
 window.stage = stage
@@ -60,7 +59,7 @@ let firstPerson    = false   // default: third-person when connected; V key togg
 // Peer label overlay
 // ---------------------------------------------------------------------------
 
-const labels = new LabelOverlay(viewportEl, camera)
+const labels = new LabelOverlay(viewportEl, () => stage.camera)
 
 function onResize() {
   stage.resize(viewportEl.clientWidth, viewportEl.clientHeight)
@@ -139,7 +138,7 @@ function setConnectionState(state) {
 const pointerBridge = new PointerInputBridge({
   client,
   canvas,
-  camera,
+  camera:            () => stage.camera,
   sceneRoot:         () => sceneGroup,
   suppressOnCapture: true,   // stop camera drag when a node has pointer capture
 })

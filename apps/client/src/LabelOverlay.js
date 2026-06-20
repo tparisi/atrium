@@ -7,9 +7,10 @@ const LABEL_HEIGHT_OFFSET = 2.2   // meters above somNode.translation (capsule i
 
 export class LabelOverlay {
   constructor(container, camera) {
-    this._container = container   // the viewport div
-    this._camera    = camera      // the Three.js camera
-    this._labels    = new Map()   // displayName → { div, somNode }
+    this._container  = container
+    // Accept a getter function so callers can pass () => stage.camera for a live read
+    this._getCamera  = typeof camera === 'function' ? camera : () => camera
+    this._labels     = new Map()   // displayName → { div, somNode }
   }
 
   addLabel(displayName, somNode) {
@@ -44,7 +45,7 @@ export class LabelOverlay {
     for (const { div, somNode } of this._labels.values()) {
       const t   = somNode.translation ?? [0, 0, 0]
       const pos = new THREE.Vector3(t[0], t[1] + LABEL_HEIGHT_OFFSET, t[2])
-      pos.project(this._camera)
+      pos.project(this._getCamera())
 
       if (pos.z > 1) {
         div.style.display = 'none'

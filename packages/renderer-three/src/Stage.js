@@ -85,21 +85,21 @@ export class Stage {
     }
 
     // ── Camera ───────────────────────────────────────────────────────────────
-    this._camera = new THREE.PerspectiveCamera(cameraFov, 1, cameraNear, cameraFar)
-    this._camera.position.set(cameraPosition[0], cameraPosition[1], cameraPosition[2])
-    this._cameraFov  = cameraFov
-    this._cameraNear = cameraNear
-    this._cameraFar  = cameraFar
+    this._defaultCamera = new THREE.PerspectiveCamera(cameraFov, 1, cameraNear, cameraFar)
+    this._defaultCamera.position.set(cameraPosition[0], cameraPosition[1], cameraPosition[2])
+    this._camera = this._defaultCamera
 
     // ── Controllers ──────────────────────────────────────────────────────────
-    this._client          = client
-    this._avatar          = null
-    this._nav             = null
-    this._animCtrl        = null
-    this._animBridge      = null
-    this._wantAnimBridge  = animBridge
-    this._AnimBridgeCtor  = _AnimBridgeCtor
-    this._sceneGroup      = null
+    this._client                 = client
+    this._avatar                 = null
+    this._nav                    = null
+    this._animCtrl               = null
+    this._animBridge             = null
+    this._wantAnimBridge         = animBridge
+    this._AnimBridgeCtor         = _AnimBridgeCtor
+    this._sceneGroup             = null
+    this._cameraListenerCleanups = []
+    this._viewportAspect         = 1   // updated by resize(); used to init per-camera aspect
 
     if (client) {
       this._avatar = new _AvatarCtor(client, { cameraOffsetY, cameraOffsetZ })
@@ -131,30 +131,115 @@ export class Stage {
   // ── Public API ───────────────────────────────────────────────────────────
 
   /**
-   * Wire the AnimationBridge for the current world's sceneGroup.
+   * Wire the AnimationBridge for the current world's sceneGroup, and build
+   * persistent Three.js camera objects for each SOMCamera in the world.
    * Call from the app's world:loaded handler, after initDocumentView().
-   * Disposes any previous bridge, then constructs, inits, and replays.
-   * No-op if animBridge was false at construction, or animCtrl is absent.
+   * Disposes any previous bridge and camera listeners, then reconstructs.
    *
    * @param {THREE.Object3D} sceneGroup  - returned by initDocumentView
    */
   setSceneGroup(sceneGroup) {
     this._sceneGroup = sceneGroup
-    if (!this._wantAnimBridge || !this._animCtrl) return
 
-    if (this._animBridge) this._animBridge.dispose()
-    this._animBridge = new this._AnimBridgeCtor(sceneGroup, this._client, this._animCtrl)
+    // Tear down mutation listeners from the previous scene's cameras
+    for (const cleanup of this._cameraListenerCleanups) cleanup()
+    this._cameraListenerCleanups = []
 
-    if (this._client?.som) {
-      this._animBridge.init(this._client.som)
-      this._animBridge.replayPlayingAnimations(this._client.som)
+    // AnimationBridge
+    if (this._wantAnimBridge && this._animCtrl) {
+      if (this._animBridge) this._animBridge.dispose()
+      this._animBridge = new this._AnimBridgeCtor(sceneGroup, this._client, this._animCtrl)
+
+      if (this._client?.som) {
+        this._animBridge.init(this._client.som)
+        this._animBridge.replayPlayingAnimations(this._client.som)
+      }
+    }
+
+    // Build per-SOMCamera Three.js objects
+    const cameras = this._client?.som?.cameras
+    if (!cameras) return
+
+    for (const somCamera of cameras) {
+      const hostNode = somCamera.node
+      if (!hostNode) {
+        console.warn(`[Stage] SOMCamera "${somCamera.name}" has no host node — skipping`)
+        continue
+      }
+      const hostObj = sceneGroup.getObjectByName(hostNode.name)
+      if (!hostObj) {
+        console.warn(`[Stage] No Object3D for SOMCamera "${somCamera.name}" (node "${hostNode.name}") — skipping`)
+        continue
+      }
+
+      let threeCamera
+      if (somCamera.type === 'perspective') {
+        const fov = somCamera.yfov != null ? (somCamera.yfov * 180) / Math.PI : 70
+        threeCamera = new THREE.PerspectiveCamera(
+          fov, this._viewportAspect, somCamera.znear ?? 0.01, somCamera.zfar ?? 1000
+        )
+      } else {
+        const hx = (somCamera.xmag ?? 1) / 2
+        const hy = (somCamera.ymag ?? 1) / 2
+        threeCamera = new THREE.OrthographicCamera(
+          -hx, hx, hy, -hy, somCamera.znear ?? 0.01, somCamera.zfar ?? 1000
+        )
+      }
+
+      // Parent at identity local transform — Stage uses this slot for nav offset
+      hostObj.add(threeCamera)
+      somCamera._rawCamera = threeCamera
+
+      // Keep Three.js lens in sync with SOMCamera mutations
+      const onMutation = (event) => {
+        const { property, value } = event.detail
+        if (threeCamera instanceof THREE.PerspectiveCamera) {
+          if (property === 'yfov') {
+            threeCamera.fov = (value * 180) / Math.PI
+            threeCamera.updateProjectionMatrix()
+          } else if (property === 'znear') {
+            threeCamera.near = value
+            threeCamera.updateProjectionMatrix()
+          } else if (property === 'zfar') {
+            threeCamera.far = value
+            threeCamera.updateProjectionMatrix()
+          } else if (property === 'aspectRatio') {
+            threeCamera.aspect = value
+            threeCamera.updateProjectionMatrix()
+          }
+        } else if (threeCamera instanceof THREE.OrthographicCamera) {
+          if (property === 'xmag') {
+            const hx = value / 2
+            threeCamera.left  = -hx
+            threeCamera.right =  hx
+            threeCamera.updateProjectionMatrix()
+          } else if (property === 'ymag') {
+            const hy = value / 2
+            threeCamera.top    =  hy
+            threeCamera.bottom = -hy
+            threeCamera.updateProjectionMatrix()
+          } else if (property === 'znear') {
+            threeCamera.near = value
+            threeCamera.updateProjectionMatrix()
+          } else if (property === 'zfar') {
+            threeCamera.far = value
+            threeCamera.updateProjectionMatrix()
+          }
+        }
+      }
+
+      somCamera.addEventListener('mutation', onMutation)
+      this._cameraListenerCleanups.push(() => {
+        somCamera.removeEventListener('mutation', onMutation)
+        somCamera._rawCamera = null
+      })
     }
   }
 
   /**
-   * Activate a SOMCamera, seeding nav state from its authored world transform
-   * and performing a one-time lens copy into this._camera. Pass null to revert
-   * to the default perspective camera.
+   * Activate a SOMCamera, swapping this._camera to the pre-built Three.js
+   * camera object parented under the host node. Pass null to revert to the
+   * persistent default perspective camera.
    *
    * @param {SOMCamera|null} somCamera
    */
@@ -162,25 +247,33 @@ export class Stage {
     if (!this._nav) return
 
     if (!somCamera) {
-      if (!(this._camera instanceof THREE.PerspectiveCamera)) {
-        this._camera = new THREE.PerspectiveCamera(this._cameraFov, 1, this._cameraNear, this._cameraFar)
-      }
+      this._camera = this._defaultCamera
       this._nav.activeCamera = null
       return
     }
 
-    const hostNode = somCamera.node
-    if (!hostNode || !this._sceneGroup) return
-    const threeObj = this._sceneGroup.getObjectByName(hostNode.name)
-    if (!threeObj) return
+    if (!somCamera.rawCamera) {
+      console.warn(`[Stage] setActiveCamera: "${somCamera.name}" has no rawCamera — skipping`)
+      return
+    }
 
-    // Extract world transform
+    this._camera = somCamera.rawCamera
+
+    // Ensure the newly-active camera has the correct viewport aspect.
+    // A per-SOMCamera object may have been constructed (or last touched) before
+    // a resize that fired while a different camera was active.
+    if (this._camera instanceof THREE.PerspectiveCamera) {
+      this._camera.aspect = this._viewportAspect
+      this._camera.updateProjectionMatrix()
+    }
+
+    // Seed nav from the camera's current world transform so navigation resumes
+    // from the authored camera position/orientation
     const worldPos  = new THREE.Vector3()
     const worldQuat = new THREE.Quaternion()
-    threeObj.getWorldPosition(worldPos)
-    threeObj.getWorldQuaternion(worldQuat)
+    somCamera.rawCamera.getWorldPosition(worldPos)
+    somCamera.rawCamera.getWorldQuaternion(worldQuat)
 
-    // Seed nav yaw/pitch from world orientation (YXZ Euler = yaw then pitch)
     const euler = new THREE.Euler().setFromQuaternion(worldQuat, 'YXZ')
     this._nav.yaw   = euler.y
     this._nav.pitch = euler.x
@@ -196,23 +289,6 @@ export class Stage {
       this._nav._orbitRadius    = ORBIT_DIST
       this._nav._orbitAzimuth   = euler.y
       this._nav._orbitElevation = -euler.x
-    }
-
-    // One-time lens copy
-    if (somCamera.type === 'perspective') {
-      if (!(this._camera instanceof THREE.PerspectiveCamera)) {
-        this._camera = new THREE.PerspectiveCamera(1, 1, 0.01, 1000)
-      }
-      this._camera.fov  = (somCamera.yfov * 180) / Math.PI
-      this._camera.near = somCamera.znear
-      this._camera.far  = somCamera.zfar
-      this._camera.updateProjectionMatrix()
-    } else {
-      const hx = (somCamera.xmag ?? 1) / 2
-      const hy = (somCamera.ymag ?? 1) / 2
-      this._camera = new THREE.OrthographicCamera(
-        -hx, hx, hy, -hy, somCamera.znear, somCamera.zfar
-      )
     }
 
     this._nav.activeCamera = somCamera
@@ -240,6 +316,7 @@ export class Stage {
    * @param {number} height
    */
   resize(width, height) {
+    this._viewportAspect = width / height
     this._renderer.setSize(width, height)
     this._camera.aspect = width / height
     this._camera.updateProjectionMatrix()
@@ -254,39 +331,68 @@ export class Stage {
     const cameraNode = this._avatar.cameraNode
     if (!localNode || !cameraNode) return
 
+    // Compute world-space eye position and quaternion from nav state
+    const worldPos  = new THREE.Vector3()
+    const worldQuat = new THREE.Quaternion()
+
     if (this._nav.mode === 'ORBIT') {
       const pos = localNode.translation ?? [0, 0, 0]
-      this._camera.position.set(pos[0], pos[1], pos[2])
+      worldPos.set(pos[0], pos[1], pos[2])
       const t = this._nav.orbitTarget
-      this._camera.lookAt(t[0], t[1], t[2])
+      const m = new THREE.Matrix4().lookAt(
+        worldPos,
+        new THREE.Vector3(t[0], t[1], t[2]),
+        new THREE.Vector3(0, 1, 0),
+      )
+      worldQuat.setFromRotationMatrix(m)
     } else {
       const yaw    = this._nav.yaw
       const pitch  = this._nav.pitch
       const qYaw   = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
       const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch)
-      const avatarPos  = localNode.translation  ?? [0, 0, 0]
-      const camOffset  = cameraNode.translation ?? [0, 0, 0]
-      const hasOffset  = Math.abs(camOffset[2]) > 0.001
+      const avatarPos = localNode.translation  ?? [0, 0, 0]
+      const camOffset = cameraNode.translation ?? [0, 0, 0]
+      const hasOffset = Math.abs(camOffset[2]) > 0.001
 
       if (hasOffset) {
         const offset = new THREE.Vector3(
           0,
           this._avatar._cameraOffsetY,
-          this._avatar._cameraOffsetZ
+          this._avatar._cameraOffsetZ,
         )
         offset.applyQuaternion(qYaw)
-        this._camera.position.set(
+        worldPos.set(
           avatarPos[0] + offset.x,
           avatarPos[1] + offset.y,
           avatarPos[2] + offset.z,
         )
         const lookTarget = new THREE.Vector3(avatarPos[0], avatarPos[1] + 1.0, avatarPos[2])
-        this._camera.lookAt(lookTarget)
-        this._camera.rotateX(pitch)
+        const m = new THREE.Matrix4().lookAt(worldPos, lookTarget, new THREE.Vector3(0, 1, 0))
+        worldQuat.setFromRotationMatrix(m).multiply(qPitch)
       } else {
-        this._camera.position.set(avatarPos[0], avatarPos[1], avatarPos[2])
-        this._camera.quaternion.copy(qYaw).multiply(qPitch)
+        worldPos.set(avatarPos[0], avatarPos[1], avatarPos[2])
+        worldQuat.copy(qYaw).multiply(qPitch)
       }
+    }
+
+    if (!this._nav.activeCamera) {
+      // Default (free-standing) camera: write world-space directly
+      this._camera.position.copy(worldPos)
+      this._camera.quaternion.copy(worldQuat)
+    } else {
+      // Bound camera: parented under a scene node — convert to local space
+      const parent = this._camera.parent
+      if (!parent) return
+
+      // Ensure parent's matrixWorld is current (handles static nested transforms)
+      parent.updateWorldMatrix(true, false)
+
+      const parentInv = new THREE.Matrix4().copy(parent.matrixWorld).invert()
+      this._camera.position.copy(worldPos).applyMatrix4(parentInv)
+
+      const parentQuat = new THREE.Quaternion()
+      parent.getWorldQuaternion(parentQuat)
+      this._camera.quaternion.copy(parentQuat.invert()).multiply(worldQuat)
     }
   }
 }

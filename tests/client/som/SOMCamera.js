@@ -7,13 +7,18 @@ import { SOMEvent }  from './SOMEvent.js'
 export class SOMCamera extends SOMObject {
   constructor(camera) {
     super()
-    this._camera = camera
+    this._camera        = camera
     this._qualifiedName = null   // set by SOMDocument._buildObjectGraph
     this._hostNode      = null   // set by SOMDocument._buildObjectGraph
+    // Renderer-populated slot: set by Stage after scene-graph construction,
+    // never written by @atrium/som itself. Analogous to the `node` back-reference
+    // but on a different lifecycle (after setSceneGroup, not during document build).
+    this._rawCamera     = null
   }
 
   get qualifiedName() { return this._qualifiedName }
   get node()          { return this._hostNode }
+  get rawCamera()     { return this._rawCamera }
 
   get name()        { return this._camera.getName() }
   set name(v)       {

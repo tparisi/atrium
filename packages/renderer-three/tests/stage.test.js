@@ -8,6 +8,7 @@
 
 import { test } from 'node:test'
 import assert   from 'node:assert/strict'
+import * as THREE from 'three'
 import { Stage } from '../src/Stage.js'
 
 // ---------------------------------------------------------------------------
@@ -53,11 +54,12 @@ function makeAvatarCtor({ localNode = null, cameraNode = null, offsetY = 2.0, of
 function makeNavCtor({ mode = 'WALK', yaw = 0, pitch = 0, orbitTarget = [0, 0, 0] } = {}) {
   return class {
     constructor(_avatar, _opts) {
-      this.mode        = mode
-      this.yaw         = yaw
-      this.pitch       = pitch
-      this.orbitTarget = orbitTarget
-      this.tickCalls   = []
+      this.mode         = mode
+      this.yaw          = yaw
+      this.pitch        = pitch
+      this.orbitTarget  = orbitTarget
+      this.activeCamera = null   // null = no bound SOMCamera (default camera path)
+      this.tickCalls    = []
     }
     tick(dt) { this.tickCalls.push(dt) }
   }
@@ -270,7 +272,7 @@ test('Stage: _syncCamera skipped when localNode is null', () => {
 // 12. ORBIT camera sync
 // ---------------------------------------------------------------------------
 
-test('Stage: ORBIT mode — camera.position set from localNode.translation and lookAt called', () => {
+test('Stage: ORBIT mode — camera.position set from localNode.translation and quaternion faces orbitTarget', () => {
   const AvatarCtor = makeAvatarCtor({
     localNode:  { translation: [1, 2, 3] },
     cameraNode: { translation: [0, 0, 0] },
@@ -287,23 +289,24 @@ test('Stage: ORBIT mode — camera.position set from localNode.translation and l
     animBridge:      false,
   })
 
-  let lookAtArgs = null
-  stage.camera.lookAt = (...args) => { lookAtArgs = args }
-
   stage.tick(0.016)
 
   assert.ok(Math.abs(stage.camera.position.x - 1) < 0.001, 'camera.x = localNode.translation.x')
   assert.ok(Math.abs(stage.camera.position.y - 2) < 0.001, 'camera.y = localNode.translation.y')
   assert.ok(Math.abs(stage.camera.position.z - 3) < 0.001, 'camera.z = localNode.translation.z')
-  assert.ok(lookAtArgs !== null, 'lookAt should be called for ORBIT')
-  assert.ok(Math.abs(lookAtArgs[0] - 5) < 0.001, 'lookAt x = orbitTarget[0]')
+
+  // Verify camera quaternion: forward direction (-Z) should point from (1,2,3) toward (5,0,5)
+  // Expected direction: (4,-2,2), magnitude = sqrt(24) ≈ 4.899, normalized ≈ (0.816,-0.408,0.408)
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(stage.camera.quaternion)
+  assert.ok(Math.abs(fwd.x - 0.816) < 0.01, 'forward.x ≈ 0.816 (toward orbitTarget.x)')
+  assert.ok(fwd.z > 0, 'forward.z > 0 (toward orbitTarget.z > camera.z)')
 })
 
 // ---------------------------------------------------------------------------
 // 13. WALK third-person camera sync (hasOffset = true)
 // ---------------------------------------------------------------------------
 
-test('Stage: WALK third-person — camera offset applied when camOffset[2] > 0.001', () => {
+test('Stage: WALK third-person — camera offset applied and quaternion faces avatar', () => {
   const AvatarCtor = makeAvatarCtor({
     localNode:  { translation: [0, 0, 0] },
     cameraNode: { translation: [0, 2.0, 4.0] },  // Z > 0.001 → third-person
@@ -322,15 +325,16 @@ test('Stage: WALK third-person — camera offset applied when camOffset[2] > 0.0
     animBridge:      false,
   })
 
-  let lookAtCalled = false
-  stage.camera.lookAt = () => { lookAtCalled = true }
-
   stage.tick(0.016)
 
   // With yaw=0 and offsetZ=4, camera should be behind avatar (+Z direction in glTF)
   // camera.position.z should be avatarZ + offsetZ = 0 + 4 = 4 (yaw=0 → no X rotation)
   assert.ok(Math.abs(stage.camera.position.z - 4.0) < 0.01, 'third-person: camera Z = offsetZ')
-  assert.ok(lookAtCalled, 'third-person: lookAt called')
+
+  // Camera at (0, 2, 4) looks toward avatar at (0, 1, 0): forward direction is approx (0, -0.243, -0.970)
+  // Verify forward.z < 0 (pointing toward avatar which is at lower Z)
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(stage.camera.quaternion)
+  assert.ok(fwd.z < 0, 'third-person: camera forward.z < 0 (faces toward avatar)')
 })
 
 // ---------------------------------------------------------------------------
