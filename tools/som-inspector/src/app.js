@@ -20,8 +20,10 @@ const loadBtn          = document.getElementById('loadBtn')
 const connectBtn       = document.getElementById('connectBtn')
 const statusDot        = document.getElementById('statusDot')
 const modeSwitcher     = document.getElementById('mode-switcher')
+const cameraSwitcher   = document.getElementById('camera-switcher')
 const viewportEl       = document.getElementById('viewport')
-const statusBar        = document.getElementById('status-bar')
+const statusBar        = document.getElementById('status-text')
+const cameraIndicatorEl = document.getElementById('camera-indicator')
 const treePanelEl      = document.getElementById('tree-panel')
 const propsPanelEl     = document.getElementById('props-panel')
 const propsHeaderEl    = document.getElementById('props-header')
@@ -41,7 +43,7 @@ const stage = new Stage(viewportEl, {
   navMouseSensitivity: 0.005,
 })
 const { renderer, nav, animCtrl } = stage
-const { scene: threeScene, camera } = stage
+const { scene: threeScene } = stage
 const avatar = stage.avatar
 const canvas  = renderer.domElement
 
@@ -51,6 +53,7 @@ const canvas  = renderer.domElement
 
 let docView    = null
 let sceneGroup = null
+let camerasList = []
 
 // ---------------------------------------------------------------------------
 // Resize
@@ -73,7 +76,10 @@ let worldBaseUrl = ''
 // ---------------------------------------------------------------------------
 
 const treeView = new TreeView(treePanelEl)
-const propSheet = new PropertySheet(propsPanelEl, propsHeaderEl)
+const propSheet = new PropertySheet(propsPanelEl, propsHeaderEl, {
+  isActiveCamera:    (cam) => nav.activeCamera === cam,
+  onSetActiveCamera: (cam) => applyActiveCamera(cam),
+})
 const worldInfo = new WorldInfoPanel(worldInfoEl, {
   onBackgroundChange: (bg) => loadBackground(threeScene, bg, worldBaseUrl),
 })
@@ -94,7 +100,7 @@ let dragState = null   // null when no drag; populated for drag-to-translate
 const pointerBridge = new PointerInputBridge({
   client,
   canvas,
-  camera,
+  camera:            () => stage.camera,
   sceneRoot:         () => sceneGroup,
   suppressOnCapture: true,   // stop nav drag when a node has pointer capture
 })
@@ -107,6 +113,25 @@ function setSelected(somNode) {
   selected = somNode
   treeView.selectNode(somNode)   // handles visual + propSheet via onSelect
 }
+
+/**
+ * Single source of truth for switching the active camera. Updates Stage,
+ * toolbar dropdown, status-bar indicator, and the PropSheet button in one call.
+ */
+function applyActiveCamera(somCamera) {
+  stage.setActiveCamera(somCamera)
+  cameraSwitcher.value = somCamera ? String(camerasList.indexOf(somCamera)) : ''
+  cameraIndicatorEl.textContent = somCamera ? `🎥 ${somCamera.name}` : ''
+  const sel = treeView.selectedNode
+  if (sel) propSheet.refresh(sel)
+}
+
+// Toolbar camera-switcher — wired once, not inside world:loaded
+cameraSwitcher.addEventListener('change', () => {
+  const value = cameraSwitcher.value
+  const somCamera = value === '' ? null : camerasList[Number(value)]
+  applyActiveCamera(somCamera)
+})
 
 // ── Node SOM event handlers ────────────────────────────────────────────────
 
@@ -209,6 +234,18 @@ client.on('world:loaded', ({ name }) => {
   stage.setSceneGroup(sceneGroup)
   treeView.build(client.som)
   propSheet.clear()
+
+  // Rebuild camera dropdown; reset active camera to default
+  camerasList = [...(client.som.cameras ?? [])]
+  while (cameraSwitcher.options.length > 1) cameraSwitcher.remove(1)
+  for (let i = 0; i < camerasList.length; i++) {
+    const opt = document.createElement('option')
+    opt.value       = String(i)
+    opt.textContent = camerasList[i].name
+    cameraSwitcher.appendChild(opt)
+  }
+  applyActiveCamera(null)
+
   worldInfo.show(client.som)
   animationsPanel.show(client.som, animCtrl)
   updateStatusBar(name ? `World: ${name}` : '')

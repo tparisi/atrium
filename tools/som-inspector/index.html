@@ -508,6 +508,7 @@
     pointer-events: none;
     font-family: 'Cascadia Code', 'Fira Code', monospace;
   }
+  #camera-indicator:not(:empty) { margin-left: 8px; }
 
   /* ── Drag-and-drop indicator ───────────────────────── */
   #viewport.drag-over {
@@ -551,6 +552,9 @@
     <option value="ORBIT">Orbit</option>
     <option value="WALK">Walk</option>
   </select>
+  <select id="camera-switcher">
+    <option value="">Default</option>
+  </select>
 </div>
 
 <div class="main">
@@ -568,7 +572,7 @@
   <!-- 3D Viewport -->
   <div id="viewport">
     <div id="crosshair"></div>
-    <div id="status-bar"></div>
+    <div id="status-bar"><span id="status-text"></span><span id="camera-indicator"></span></div>
   </div>
 </div>
 

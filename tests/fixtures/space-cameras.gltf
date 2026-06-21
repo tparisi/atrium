@@ -155,6 +155,26 @@
       "count": 82,
       "bufferView": 4,
       "byteOffset": 12
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5126,
+      "count": 5,
+      "max": [
+        4
+      ],
+      "min": [
+        0
+      ],
+      "bufferView": 5,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC4",
+      "componentType": 5126,
+      "count": 5,
+      "bufferView": 5,
+      "byteOffset": 20
     }
   ],
   "bufferViews": [
@@ -191,12 +211,17 @@
       "byteLength": 1968,
       "byteStride": 24,
       "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 6336,
+      "byteLength": 100
     }
   ],
   "buffers": [
     {
       "uri": "space-cameras.bin",
-      "byteLength": 6336
+      "byteLength": 6436
     }
   ],
   "materials": [
@@ -327,6 +352,24 @@
         "xmag": 5,
         "ymag": 3
       }
+    },
+    {
+      "name": "NestedCamera",
+      "type": "perspective",
+      "perspective": {
+        "znear": 0.1,
+        "zfar": 100,
+        "yfov": 0.8
+      }
+    },
+    {
+      "name": "AnimatedCamera",
+      "type": "perspective",
+      "perspective": {
+        "znear": 0.1,
+        "zfar": 100,
+        "yfov": 0.8
+      }
     }
   ],
   "nodes": [
@@ -396,6 +439,79 @@
         0.7071067811865476
       ],
       "camera": 1
+    },
+    {
+      "name": "NestedCameraMount",
+      "translation": [
+        3,
+        1,
+        2
+      ],
+      "rotation": [
+        0.16773125949652062,
+        0.25488700224417876,
+        -0.044943455527547777,
+        0.9512512425641977
+      ],
+      "children": [
+        8
+      ]
+    },
+    {
+      "name": "NestedCamera",
+      "translation": [
+        0,
+        0.5,
+        -1
+      ],
+      "camera": 2
+    },
+    {
+      "name": "AnimatedCameraMount",
+      "translation": [
+        -3,
+        1,
+        2
+      ],
+      "rotation": [
+        0.1205904774487396,
+        0.37940952255126037,
+        -0.049950211252314816,
+        0.9159756150367534
+      ],
+      "children": [
+        10
+      ]
+    },
+    {
+      "name": "AnimatedCamera",
+      "translation": [
+        0,
+        0.5,
+        -1
+      ],
+      "camera": 3
+    }
+  ],
+  "animations": [
+    {
+      "name": "CameraMountRotate",
+      "samplers": [
+        {
+          "input": 12,
+          "output": 13,
+          "interpolation": "LINEAR"
+        }
+      ],
+      "channels": [
+        {
+          "sampler": 0,
+          "target": {
+            "node": 9,
+            "path": "rotation"
+          }
+        }
+      ]
     }
   ],
   "scenes": [
@@ -406,7 +522,9 @@
         1,
         2,
         5,
-        6
+        6,
+        7,
+        9
       ]
     }
   ]

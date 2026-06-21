@@ -28,11 +28,16 @@ function fmt(v) {
 // ---------------------------------------------------------------------------
 
 export class PropertySheet {
-  constructor(containerEl, headerEl) {
-    this._container = containerEl
-    this._header    = headerEl
-    this._node      = null
-    this._updaters  = []   // () => void — re-read SOM values into existing inputs
+  constructor(containerEl, headerEl, {
+    isActiveCamera    = () => false,
+    onSetActiveCamera = () => {},
+  } = {}) {
+    this._container        = containerEl
+    this._header           = headerEl
+    this._node             = null
+    this._updaters         = []   // () => void — re-read SOM values into existing inputs
+    this._isActiveCamera   = isActiveCamera
+    this._onSetActiveCamera = onSetActiveCamera
   }
 
   // ---------------------------------------------------------------------------
@@ -325,6 +330,47 @@ export class PropertySheet {
       num.addEventListener('change', () => { cam.zfar = parseFloat(num.value) || 1000 })
       this._updaters.push(() => { num.value = fmt(cam.zfar ?? 1000) })
       inp.appendChild(num)
+    }
+
+    // X-Mag (orthographic half-extent)
+    {
+      const inp  = this._addRow(sec, 'X-Mag')
+      const num  = document.createElement('input')
+      num.type   = 'number'; num.step = '0.1'; num.min = '0.01'
+      num.style.width = '70px'
+      num.value  = fmt(cam.xmag ?? 5)
+      num.addEventListener('change', () => { cam.xmag = parseFloat(num.value) || 5 })
+      this._updaters.push(() => { num.value = fmt(cam.xmag ?? 5) })
+      inp.appendChild(num)
+    }
+
+    // Y-Mag (orthographic half-extent)
+    {
+      const inp  = this._addRow(sec, 'Y-Mag')
+      const num  = document.createElement('input')
+      num.type   = 'number'; num.step = '0.1'; num.min = '0.01'
+      num.style.width = '70px'
+      num.value  = fmt(cam.ymag ?? 3)
+      num.addEventListener('change', () => { cam.ymag = parseFloat(num.value) || 3 })
+      this._updaters.push(() => { num.value = fmt(cam.ymag ?? 3) })
+      inp.appendChild(num)
+    }
+
+    // Active camera toggle button
+    {
+      const inp = this._addRow(sec, 'Active')
+      const btn = document.createElement('button')
+      const renderBtn = () => {
+        const active = this._isActiveCamera(cam)
+        btn.textContent = active ? 'Active ✓ — click to deactivate' : 'Set as Active Camera'
+        btn.className   = active ? 'primary' : ''
+      }
+      renderBtn()
+      btn.addEventListener('click', () => {
+        this._onSetActiveCamera(this._isActiveCamera(cam) ? null : cam)
+      })
+      this._updaters.push(renderBtn)
+      inp.appendChild(btn)
     }
 
     this._container.appendChild(sec)
