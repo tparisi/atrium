@@ -338,6 +338,19 @@ test('Stage: WALK third-person — camera offset applied and quaternion faces av
 })
 
 // ---------------------------------------------------------------------------
+// Helper — build a THREE.PerspectiveCamera parented at known world transform
+// ---------------------------------------------------------------------------
+
+function makeBoundCamera(worldX, worldY, worldZ) {
+  const host      = new THREE.Object3D()
+  const rawCamera = new THREE.PerspectiveCamera(70, 1, 0.01, 1000)
+  rawCamera.position.set(worldX, worldY, worldZ)
+  host.add(rawCamera)
+  host.updateMatrixWorld(true)
+  return { rawCamera, somCamera: { name: 'TestCamera', rawCamera } }
+}
+
+// ---------------------------------------------------------------------------
 // 14. WALK first-person camera sync (hasOffset = false, Z ≈ 0)
 // ---------------------------------------------------------------------------
 
@@ -370,4 +383,141 @@ test('Stage: WALK first-person — quaternion path taken when camOffset[2] ≈ 0
   assert.ok(Math.abs(stage.camera.position.y - 2) < 0.001, 'first-person: camera.y = avatar.y')
   assert.ok(Math.abs(stage.camera.position.z - 3) < 0.001, 'first-person: camera.z = avatar.z')
   assert.ok(!lookAtCalled, 'first-person: lookAt NOT called (uses quaternion)')
+})
+
+// ---------------------------------------------------------------------------
+// 15. WALK bound, third-person — position seeded, third-person rig bypassed
+// ---------------------------------------------------------------------------
+
+test('Stage: WALK bound third-person — camera at authored world pos, not behind avatar', () => {
+  const localNode  = { translation: [10, 0, 10] }   // avatar started far away
+  const cameraNode = { translation: [0, 2.0, 4.0] } // Z > 0.001 → third-person offset rig
+  const AvatarCtor = makeAvatarCtor({ localNode, cameraNode, offsetY: 2.0, offsetZ: 4.0 })
+  const NavCtor    = makeNavCtor({ mode: 'WALK', yaw: 0, pitch: 0 })
+
+  const stage = new Stage(makeContainer(), {
+    client:          makeClient(),
+    _renderer:       makeRenderer(),
+    _AvatarCtor:     AvatarCtor,
+    _NavCtor:        NavCtor,
+    _AnimCtrlCtor:   makeAnimCtrlCtor(),
+    _AnimBridgeCtor: makeAnimBridgeCtor(),
+    animBridge:      false,
+  })
+
+  const { somCamera } = makeBoundCamera(0, 2, 8)
+  stage.setActiveCamera(somCamera)
+  stage.tick(0.016)
+
+  // Position should be the authored [0, 2, 8], not avatar pos [10, 0, 10] + offset
+  assert.ok(Math.abs(stage.camera.position.x - 0) < 0.01, 'bound WALK: x = authored 0')
+  assert.ok(Math.abs(stage.camera.position.y - 2) < 0.01, 'bound WALK: y = authored 2')
+  assert.ok(Math.abs(stage.camera.position.z - 8) < 0.01, 'bound WALK: z = authored 8, not 10+4')
+
+  // Forward direction: camera has identity rotation → faces -Z, not toward avatar at [10,0,10]
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(stage.camera.quaternion)
+  assert.ok(fwd.z < 0, 'bound WALK: forward.z < 0 (authored direction, not look-at-avatar)')
+  assert.ok(Math.abs(fwd.x) < 0.01, 'bound WALK: forward.x ≈ 0 (not yawed toward avatar)')
+})
+
+// ---------------------------------------------------------------------------
+// 16. WALK bound, first-person — position seed works regardless of rig state
+// ---------------------------------------------------------------------------
+
+test('Stage: WALK bound first-person — position seeded from authored camera pos', () => {
+  const localNode  = { translation: [10, 0, 10] }   // avatar started far away
+  const cameraNode = { translation: [0, 1.6, 0] }   // Z ≈ 0 → first-person (no offset)
+  const AvatarCtor = makeAvatarCtor({ localNode, cameraNode, offsetY: 2.0, offsetZ: 4.0 })
+  const NavCtor    = makeNavCtor({ mode: 'WALK', yaw: 0, pitch: 0 })
+
+  const stage = new Stage(makeContainer(), {
+    client:          makeClient(),
+    _renderer:       makeRenderer(),
+    _AvatarCtor:     AvatarCtor,
+    _NavCtor:        NavCtor,
+    _AnimCtrlCtor:   makeAnimCtrlCtor(),
+    _AnimBridgeCtor: makeAnimBridgeCtor(),
+    animBridge:      false,
+  })
+
+  const { somCamera } = makeBoundCamera(0, 2, 8)
+  stage.setActiveCamera(somCamera)
+  stage.tick(0.016)
+
+  // Position should be authored [0, 2, 8], not stale avatar pos [10, 0, 10]
+  assert.ok(Math.abs(stage.camera.position.x - 0) < 0.01, 'bound first-person: x = 0')
+  assert.ok(Math.abs(stage.camera.position.y - 2) < 0.01, 'bound first-person: y = 2')
+  assert.ok(Math.abs(stage.camera.position.z - 8) < 0.01, 'bound first-person: z = 8')
+
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(stage.camera.quaternion)
+  assert.ok(fwd.z < 0, 'bound first-person: forward.z < 0')
+})
+
+// ---------------------------------------------------------------------------
+// 17. FLY bound, third-person — same fix covers FLY mode
+// ---------------------------------------------------------------------------
+
+test('Stage: FLY bound third-person — same fix applies (FLY takes same else branch as WALK)', () => {
+  const localNode  = { translation: [10, 0, 10] }
+  const cameraNode = { translation: [0, 2.0, 4.0] }
+  const AvatarCtor = makeAvatarCtor({ localNode, cameraNode, offsetY: 2.0, offsetZ: 4.0 })
+  const NavCtor    = makeNavCtor({ mode: 'FLY', yaw: 0, pitch: 0 })
+
+  const stage = new Stage(makeContainer(), {
+    client:          makeClient(),
+    _renderer:       makeRenderer(),
+    _AvatarCtor:     AvatarCtor,
+    _NavCtor:        NavCtor,
+    _AnimCtrlCtor:   makeAnimCtrlCtor(),
+    _AnimBridgeCtor: makeAnimBridgeCtor(),
+    animBridge:      false,
+  })
+
+  const { somCamera } = makeBoundCamera(0, 2, 8)
+  stage.setActiveCamera(somCamera)
+  stage.tick(0.016)
+
+  assert.ok(Math.abs(stage.camera.position.x - 0) < 0.01, 'FLY bound: x = authored 0')
+  assert.ok(Math.abs(stage.camera.position.y - 2) < 0.01, 'FLY bound: y = authored 2')
+  assert.ok(Math.abs(stage.camera.position.z - 8) < 0.01, 'FLY bound: z = authored 8')
+
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(stage.camera.quaternion)
+  assert.ok(fwd.z < 0, 'FLY bound: forward.z < 0 (authored direction)')
+  assert.ok(Math.abs(fwd.x) < 0.01, 'FLY bound: forward.x ≈ 0')
+})
+
+// ---------------------------------------------------------------------------
+// 18. WALK bind then unbind — third-person rig restored after setActiveCamera(null)
+// ---------------------------------------------------------------------------
+
+test('Stage: WALK bind then unbind — third-person rig restored after setActiveCamera(null)', () => {
+  const localNode  = { translation: [0, 0, 0] }
+  const cameraNode = { translation: [0, 2.0, 4.0] }
+  const AvatarCtor = makeAvatarCtor({ localNode, cameraNode, offsetY: 2.0, offsetZ: 4.0 })
+  const NavCtor    = makeNavCtor({ mode: 'WALK', yaw: 0, pitch: 0 })
+
+  const stage = new Stage(makeContainer(), {
+    client:          makeClient(),
+    _renderer:       makeRenderer(),
+    _AvatarCtor:     AvatarCtor,
+    _NavCtor:        NavCtor,
+    _AnimCtrlCtor:   makeAnimCtrlCtor(),
+    _AnimBridgeCtor: makeAnimBridgeCtor(),
+    animBridge:      false,
+  })
+
+  const { somCamera } = makeBoundCamera(0, 2, 8)
+
+  // Bind, then simulate user walking back to origin, then unbind
+  stage.setActiveCamera(somCamera)
+  localNode.translation = [0, 0, 0]   // avatar returned to origin
+  stage.setActiveCamera(null)
+
+  stage.tick(0.016)
+
+  // Third-person rig should be active again: camera offset behind avatar
+  // avatarPos=[0,0,0], offsetZ=4 → camera.z = 0+4 = 4 (same as test 13)
+  assert.ok(Math.abs(stage.camera.position.z - 4.0) < 0.01, 'after unbind: camera Z = offsetZ')
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(stage.camera.quaternion)
+  assert.ok(fwd.z < 0, 'after unbind: forward.z < 0 (third-person look-at-avatar restored)')
 })

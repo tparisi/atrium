@@ -289,6 +289,10 @@ export class Stage {
       this._nav._orbitRadius    = ORBIT_DIST
       this._nav._orbitAzimuth   = euler.y
       this._nav._orbitElevation = -euler.x
+    } else if (this._avatar?.localNode) {
+      // WALK/FLY: seed the avatar position from the camera's authored world position
+      // so the eye lands at the authored spot, not wherever the avatar was standing.
+      this._avatar.localNode.translation = [worldPos.x, worldPos.y, worldPos.z]
     }
 
     this._nav.activeCamera = somCamera
@@ -352,7 +356,9 @@ export class Stage {
       const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch)
       const avatarPos = localNode.translation  ?? [0, 0, 0]
       const camOffset = cameraNode.translation ?? [0, 0, 0]
-      const hasOffset = Math.abs(camOffset[2]) > 0.001
+      // Bypass the third-person rig while bound to a SOMCamera — the offset
+      // look-at-avatar computation has no meaning when the view is authored.
+      const hasOffset = !this._nav.activeCamera && Math.abs(camOffset[2]) > 0.001
 
       if (hasOffset) {
         const offset = new THREE.Vector3(
